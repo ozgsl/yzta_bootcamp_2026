@@ -373,6 +373,10 @@ class AppStrings {
       _t('Create', 'Oluştur', 'Erstellen', 'Créer', '作成', '만들기', '创建');
   String get navProfile =>
       _t('Profile', 'Profil', 'Profil', 'Profil', 'プロフィール', '프로필', '个人资料');
+  String get navMore =>
+      _t('More', 'Daha Fazla', 'Mehr', 'Plus', 'もっと', '더보기', '更多');
+  String get accountSettings =>
+      _t('Account Settings', 'Hesap Ayarları', 'Kontoeinstellungen', 'Paramètres du compte', 'アカウント設定', '계정 설정', '帐户设置');
 
   // ── Comments / Likes / Save ──────────────────────────────────
   String get viewAllComments => _t(

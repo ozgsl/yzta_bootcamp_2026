@@ -4,6 +4,8 @@ import '../../../../core/theme/app_theme.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
 import '../providers/profile_provider.dart';
 import '../../../../services/api_service.dart';
+import '../../../../core/localization/app_strings.dart';
+import '../../../../core/localization/locale_provider.dart';
 
 class LocalProfileScreen extends ConsumerStatefulWidget {
   const LocalProfileScreen({super.key});
@@ -58,14 +60,15 @@ class _LocalProfileScreenState extends ConsumerState<LocalProfileScreen> {
 
     final username = profile?.username ?? 'Loading...';
     final email = profile?.email ?? 'Loading...';
+    final strings = ref.watch(stringsProvider);
 
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
-        title: const Text(
-          'Account Info',
+        title: Text(
+          strings.accountSettings,
           style: TextStyle(
               color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
         ),
@@ -77,23 +80,7 @@ class _LocalProfileScreenState extends ConsumerState<LocalProfileScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Center(
-                child: Container(
-                  width: 100,
-                  height: 100,
-                  decoration: BoxDecoration(
-                    color: Theme.of(context).cardColor,
-                    shape: BoxShape.circle,
-                  ),
-                  child: Center(
-                    child: Icon(Icons.person_rounded,
-                        size: 50,
-                        color: Theme.of(context).textTheme.bodyMedium?.color ??
-                            Colors.grey),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 32),
+
               Text(
                 'Personal Information',
                 style: TextStyle(
@@ -137,6 +124,56 @@ class _LocalProfileScreenState extends ConsumerState<LocalProfileScreen> {
                           Text('User ID', style: TextStyle(color: Theme.of(context).textTheme.bodyLarge?.color ?? Colors.white, fontSize: 15, fontWeight: FontWeight.w500)),
                           Text(userId, style: TextStyle(color: Theme.of(context).textTheme.bodySmall?.color ?? Colors.grey, fontSize: 13)),
                         ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 32),
+              
+              // Sign Out & Delete Account
+              Container(
+                decoration: BoxDecoration(
+                  color: Theme.of(context).cardColor,
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: Column(
+                  children: [
+                    InkWell(
+                      onTap: () {
+                        ref.read(authProvider.notifier).logout();
+                      },
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                        child: Row(
+                          children: [
+                            Icon(Icons.logout_rounded, color: Theme.of(context).textTheme.bodyLarge?.color),
+                            const SizedBox(width: 16),
+                            Text(
+                              strings.logout,
+                              style: TextStyle(fontSize: 15, fontWeight: FontWeight.w500),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    Divider(height: 1, color: Theme.of(context).dividerColor),
+                    InkWell(
+                      onTap: () {
+                        // TODO: Implement delete account logic
+                      },
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                        child: Row(
+                          children: [
+                            Icon(Icons.delete_outline_rounded, color: Colors.redAccent),
+                            const SizedBox(width: 16),
+                            Text(
+                              strings.deleteAccount,
+                              style: TextStyle(fontSize: 15, fontWeight: FontWeight.w500, color: Colors.redAccent),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                   ],

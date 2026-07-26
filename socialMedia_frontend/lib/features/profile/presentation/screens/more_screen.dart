@@ -24,7 +24,7 @@ class MoreScreen extends ConsumerWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                strings.settings,
+                strings.navMore,
                 style: TextStyle(
                   color: Colors.white,
                   fontSize: 28,
@@ -50,24 +50,12 @@ class MoreScreen extends ConsumerWidget {
                   ),
                   child: Row(
                     children: [
-                      Container(
-                        width: 60,
-                        height: 60,
-                        decoration: BoxDecoration(
-                          color: Theme.of(context).colorScheme.surface,
-                          shape: BoxShape.circle,
-                        ),
-                        child: Icon(Icons.person_rounded,
-                            color: Theme.of(context).colorScheme.primary,
-                            size: 32),
-                      ),
-                      SizedBox(width: 16),
                       Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              strings.navProfile,
+                              strings.accountSettings,
                               style: TextStyle(
                                 color: Colors.white,
                                 fontSize: 18,
@@ -164,37 +152,6 @@ class MoreScreen extends ConsumerWidget {
                 ),
               ),
 
-              const SizedBox(height: 16),
-
-              Container(
-                decoration: BoxDecoration(
-                  color: Theme.of(context).cardColor,
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                child: _SettingsAppearance(
-                    title: strings.theme,
-                    icon: Icons.brightness_medium_rounded),
-              ),
-
-              const SizedBox(height: 16),
-
-              Container(
-                decoration: BoxDecoration(
-                  color: Theme.of(context).cardColor,
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                child: _SettingsTile(
-                  title: strings.logout,
-                  icon: Icons.logout_rounded,
-                  isCenter: true,
-                  onTap: () {
-                    ref.read(authProvider.notifier).logout();
-                  },
-                ),
-              ),
-
-              const SizedBox(height: 16),
-
               Container(
                 decoration: BoxDecoration(
                   color: Theme.of(context).cardColor,
@@ -213,15 +170,18 @@ class MoreScreen extends ConsumerWidget {
                         icon: Icons.security_rounded,
                         hasExternalIcon: true,
                         onTap: () {}),
-                    Divider(height: 1, color: Theme.of(context).dividerColor),
-                    _SettingsTile(
-                      title: strings.deleteAccount,
-                      icon: Icons.delete_outline_rounded,
-                      isDestructive: true,
-                      onTap: () {},
-                    ),
                   ],
                 ),
+              ),
+              const SizedBox(height: 16),
+              Container(
+                decoration: BoxDecoration(
+                  color: Theme.of(context).cardColor,
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: _SettingsAppearance(
+                    title: strings.theme,
+                    icon: Icons.brightness_medium_rounded),
               ),
               const SizedBox(height: 100), // padding for bottom nav
             ],
