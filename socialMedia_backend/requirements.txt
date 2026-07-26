@@ -10,3 +10,10 @@ pytest-asyncio==0.24.0
 pydantic-settings==2.6.0
 google-genai>=0.1.2
 pyotp==2.9.0
+
+# FashionSigLIP — Kıyafet sınıflandırma modeli (Python 3.9 uyumlu)
+torch>=2.8.0
+transformers==4.36.2
+open-clip-torch>=3.3.0
+Pillow>=10.0.0
+numpy>=1.24.0
