@@ -617,7 +617,7 @@ class _CreatePostScreenState extends ConsumerState<CreatePostScreen> {
       // Profil Provider'ı da güncelle ki anında podyuma düşsün
       final currentUserId = ref.read(authProvider).currentUserId;
       if (currentUserId != null) {
-        ref.read(profileProvider.notifier).loadProfile(currentUserId);
+        ref.read(profileProvider.notifier).loadProfile(currentUserId, currentUserId);
       }
       
       // Ekranı kapat

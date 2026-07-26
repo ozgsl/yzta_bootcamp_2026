@@ -30,7 +30,7 @@ class _CreateOutfitScreenState extends ConsumerState<CreateOutfitScreen> {
     final userId = ref.read(authProvider).currentUserId;
     if (userId == null) return;
     try {
-      final items = await _api.getWardrobe(userId);
+      final items = await _api.getClothes(userId);
       setState(() {
         _wardrobeItems = items;
         _isLoading = false;

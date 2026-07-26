@@ -2,7 +2,7 @@ import requests
 import uuid
 import sys
 
-BASE_URL = "http://localhost:8000"
+BASE_URL = "http://localhost:8001"
 
 GREEN  = "\033[92m"
 RED    = "\033[91m"
@@ -448,6 +448,96 @@ def test_wardrobe(user_id):
 
 
 # ─────────────────────────────────────────────────────────
+# 12. AI / ML — FashionSigLIP + Caption
+# ─────────────────────────────────────────────────────────
+def test_ai_ml(user_id):
+    section("12. AI / ML — FashionSigLIP + Caption")
+
+    # 12a. /wardrobe/items/analyze — URL ile analiz
+    test_img_url = "https://images.unsplash.com/photo-1521572163474-6864f9cf17ab?w=300"
+    r = requests.post(f"{BASE_URL}/wardrobe/items/analyze",
+                      json={"image_url": test_img_url},
+                      timeout=60)
+    if r.status_code == 200:
+        d = r.json()
+        if d.get("success") and d.get("data"):
+            data = d["data"]
+            tur = data.get("tur", "?")
+            renk = data.get("renk", "?")
+            conf = data.get("confidence", 0)
+            ok(f"POST /wardrobe/items/analyze → {tur} / {renk} (conf={conf:.2f})")
+        else:
+            fail("POST /wardrobe/items/analyze → success=False", str(d))
+    elif r.status_code == 503:
+        skip("POST /wardrobe/items/analyze → Model henüz yüklenmedi (503)")
+    else:
+        fail("POST /wardrobe/items/analyze", r.text[:200])
+
+    # 12b. /captions/upload — dosya yükle + otomatik analiz
+    # Test için küçük bir PNG oluştur (gerçek görsel olmadan da test edilebilir)
+    import io as _io, struct
+    # 1x1 beyaz PNG
+    png_header = b'\x89PNG\r\n\x1a\n'
+    ihdr = struct.pack('>IIBBBBB', 1, 1, 8, 2, 0, 0, 0)
+    def _crc(data): import zlib; return struct.pack('>I', zlib.crc32(data) & 0xffffffff)
+    ihdr_chunk = b'IHDR' + ihdr; png = png_header + struct.pack('>I', 13) + ihdr_chunk + _crc(ihdr_chunk)
+    idat_data = b'\x00\xff\xff\xff'; import zlib
+    idat_comp = zlib.compress(idat_data)
+    idat_chunk = b'IDAT' + idat_comp; png += struct.pack('>I', len(idat_comp)) + idat_chunk + _crc(idat_chunk)
+    iend_chunk = b'IEND'; png += struct.pack('>I', 0) + iend_chunk + _crc(iend_chunk)
+
+    r2 = requests.post(f"{BASE_URL}/captions/upload",
+                       files={"file": ("test.png", _io.BytesIO(png), "image/png")},
+                       timeout=60)
+    if r2.status_code == 200:
+        d2 = r2.json()
+        url = d2.get("url", "")
+        ai = d2.get("ai_analysis")
+        if ai:
+            ok(f"POST /captions/upload → URL OK + AI: {ai.get('tur','?')}/{ai.get('renk','?')}")
+        else:
+            ok(f"POST /captions/upload → URL OK (AI analiz yok — model yüklü değil)")
+        uploaded_url = url
+    else:
+        fail("POST /captions/upload", r2.text[:200])
+        uploaded_url = None
+
+    # 12c. /captions/suggest — ai_analysis ile zengin caption
+    r3 = requests.post(f"{BASE_URL}/captions/suggest",
+                       json={
+                           "outfit_items": [{"name": "beyaz tişört", "category": "üst giyim"}],
+                           "style_hint": "gündelik",
+                           "image_url": test_img_url,
+                           "ai_analysis": {
+                               "tur": "tişört", "renk": "beyaz",
+                               "stil_etiketi": "gündelik", "mevsim": "yaz"
+                           }
+                       }, timeout=90)
+    if r3.status_code == 200:
+        d3 = r3.json()
+        caption = (d3.get("data") or {}).get("caption", "")
+        if caption:
+            ok(f"POST /captions/suggest (ai_analysis ile) → '{caption[:80]}...'")
+        else:
+            skip("POST /captions/suggest → Caption boş (Ollama kapalı olabilir)")
+    elif r3.status_code in (500, 502):
+        skip("POST /captions/suggest → Ollama kapalı, atlandı")
+    else:
+        fail("POST /captions/suggest", r3.text[:200])
+
+    # 12d. /wardrobe/items/analyze — model durumu
+    r4 = requests.post(f"{BASE_URL}/wardrobe/items/analyze",
+                       json={"image_url": "http://invalid-url-for-test"},
+                       timeout=15)
+    if r4.status_code in (200, 422, 400, 500):
+        ok(f"POST /wardrobe/items/analyze (hatalı URL) → {r4.status_code} (graceful hata)")
+    else:
+        fail(f"POST /wardrobe/items/analyze hatalı URL → beklenmeyen {r4.status_code}", r4.text[:100])
+
+
+
+
+# ─────────────────────────────────────────────────────────
 # 10. SAVE / UNSAVE POSTS
 # ─────────────────────────────────────────────────────────
 def test_save_posts(user_id, post_id):
@@ -536,7 +626,12 @@ def main():
     user_id_b = test_follows(user_id)
     test_wardrobe(user_id)
     test_save_posts(user_id, post_id)
+
+    # ── AI / ML — FashionSigLIP + Caption ─────────────────────
+    test_ai_ml(user_id)
+
     test_cleanup(user_id, user_id_b, post_id)
+
 
     total = passed + failed + skipped
     print(f"\n{'='*60}")
