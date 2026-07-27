@@ -88,11 +88,11 @@ class AppTheme {
   static ThemeData get lightTheme {
     return ThemeData(
       brightness: Brightness.light,
-      primaryColor: Colors.white,
-      scaffoldBackgroundColor: const Color(0xFFF5F5F7), // Soft light gray
+      primaryColor: const Color(0xFFFFFFFF), // Pure white background
+      scaffoldBackgroundColor: const Color(0xFFFFFFFF), // Pure white background
       fontFamily: 'Inter',
       appBarTheme: const AppBarTheme(
-        backgroundColor: Colors.white,
+        backgroundColor: Color(0xFFFFFFFF),
         elevation: 0,
         centerTitle: false,
         iconTheme: IconThemeData(color: Color(0xFF1E1A29)),
@@ -104,12 +104,13 @@ class AppTheme {
       colorScheme: const ColorScheme.light(
         primary: accentPurple,
         secondary: accentPink,
-        surface: Colors.white,
+        surface: Color(0xFFF5E6FB), // Light soft purple for surfaces/cards
+        onSurface: Color(0xFF1E1A29), // Black text
         error: errorColor,
       ),
       cardTheme: CardThemeData(
-        color: Colors.white,
-        elevation: 4,
+        color: const Color(0xFFF9F1FD), // Very light purple for cards
+        elevation: 2,
         shadowColor: const Color(0xFF1E1A29).withValues(alpha: 0.05),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       ),

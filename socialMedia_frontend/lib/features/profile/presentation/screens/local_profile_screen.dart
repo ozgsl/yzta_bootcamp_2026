@@ -70,9 +70,9 @@ class _LocalProfileScreenState extends ConsumerState<LocalProfileScreen> {
         title: Text(
           strings.accountSettings,
           style: TextStyle(
-              color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
+              color: Theme.of(context).textTheme.bodyLarge?.color ?? Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
         ),
-        iconTheme: const IconThemeData(color: Colors.white),
+        iconTheme: IconThemeData(color: Theme.of(context).iconTheme.color ?? Colors.white),
       ),
       body: SafeArea(
         child: SingleChildScrollView(

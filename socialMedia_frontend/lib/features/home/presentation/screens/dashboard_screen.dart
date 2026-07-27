@@ -3,8 +3,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../profile/presentation/providers/profile_provider.dart';
 import '../../../feed/presentation/screens/feed_screen.dart';
+import '../../../feed/presentation/widgets/post_card.dart';
+import '../../../feed/presentation/widgets/comments_bottom_sheet.dart';
+import '../../../feed/presentation/providers/feed_provider.dart';
 import '../../../wardrobe/presentation/screens/ai_stylist_screen.dart';
 import '../../../wardrobe/presentation/screens/add_item_screen.dart';
+import 'analytics_screen.dart';
 import '../../../../core/localization/app_strings.dart';
 import '../../../../core/localization/locale_provider.dart';
 
@@ -32,12 +36,17 @@ class DashboardScreen extends ConsumerWidget {
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: SafeArea(
-        child: SingleChildScrollView(
-          padding: EdgeInsets.symmetric(horizontal: 24.0, vertical: 24.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Greeting
+        child: RefreshIndicator(
+          onRefresh: () => ref.read(feedProvider).refresh(),
+          child: CustomScrollView(
+            slivers: [
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 24.0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Greeting
               Text(
                 '$greeting, $name',
                 style: TextStyle(
@@ -275,15 +284,129 @@ class DashboardScreen extends ConsumerWidget {
                       icon: Icons.bar_chart_rounded,
                       title: 'Analytics',
                       subtitle: 'Your style stats',
-                      onTap: () {},
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: (_) => const AnalyticsScreen()),
+                        );
+                      },
                     ),
                   ),
                 ],
               ),
 
-              SizedBox(height: 100), // padding for bottom nav
+                    ],
+                  ),
+                ),
+              ),
+              
+              // Feed Section
+              SliverPadding(
+                padding: const EdgeInsets.only(left: 24, right: 24, top: 16, bottom: 8),
+                sliver: SliverToBoxAdapter(
+                  child: Text(
+                    'Social Feed',
+                    style: TextStyle(
+                      color: Theme.of(context).textTheme.bodyLarge?.color ?? Colors.white,
+                      fontSize: 18,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ),
+              
+              _buildFeedSliver(context, ref),
             ],
           ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFeedSliver(BuildContext context, WidgetRef ref) {
+    final provider = ref.watch(feedProvider);
+    final currentUserId = ref.watch(authProvider).currentUserId ?? '';
+
+    if (provider.isLoading) {
+      return const SliverToBoxAdapter(
+        child: Center(
+          child: Padding(
+            padding: EdgeInsets.all(32.0),
+            child: CircularProgressIndicator(),
+          ),
+        ),
+      );
+    }
+
+    if (provider.posts.isEmpty) {
+      return SliverToBoxAdapter(
+        child: Container(
+          margin: const EdgeInsets.symmetric(horizontal: 24),
+          padding: const EdgeInsets.all(24),
+          decoration: BoxDecoration(
+            color: Theme.of(context).cardColor,
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: Column(
+            children: [
+              Icon(Icons.explore_rounded, color: Theme.of(context).textTheme.bodySmall?.color ?? Colors.grey, size: 40),
+              const SizedBox(height: 12),
+              Text(
+                "No posts yet. Follow users to see their posts here!",
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Theme.of(context).textTheme.bodyMedium?.color ?? Colors.grey, fontSize: 14),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return SliverPadding(
+      padding: const EdgeInsets.only(bottom: 100),
+      sliver: SliverList(
+        delegate: SliverChildBuilderDelegate(
+          (context, index) {
+            if (index == provider.posts.length) {
+              return Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(16.0),
+                  child: SizedBox(
+                    width: 24, height: 24, 
+                    child: CircularProgressIndicator(strokeWidth: 2, color: Theme.of(context).colorScheme.primary)
+                  ),
+                ),
+              );
+            }
+            final post = provider.posts[index];
+            return Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16.0),
+              child: PostCard(
+                post: post,
+                onLike: (postId) => provider.toggleLike(postId),
+                onSave: (postId) => provider.toggleSave(postId),
+                onComment: () {
+                  CommentsBottomSheet.show(
+                    context,
+                    postId: post.postId,
+                    currentUserId: currentUserId,
+                    initialCommentsCount: post.commentsCount,
+                    onCommentsCountChanged: (count) =>
+                        provider.updateCommentsCount(post.postId, count),
+                  );
+                },
+                onUserTap: (userId) {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => ProfileScreen(userId: userId),
+                    ),
+                  );
+                },
+              ),
+            );
+          },
+          childCount: provider.posts.length + (provider.hasMore ? 1 : 0),
         ),
       ),
     );

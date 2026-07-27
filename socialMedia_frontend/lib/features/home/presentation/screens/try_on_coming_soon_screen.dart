@@ -24,10 +24,10 @@ class TryOnComingSoonScreen extends StatelessWidget {
                     color: Theme.of(context).colorScheme.secondary, size: 48),
               ),
               const SizedBox(height: 32),
-              const Text(
+              Text(
                 'Try-On Photo',
                 style: TextStyle(
-                  color: Colors.white,
+                  color: Theme.of(context).textTheme.bodyLarge?.color ?? Colors.white,
                   fontSize: 24,
                   fontWeight: FontWeight.bold,
                 ),

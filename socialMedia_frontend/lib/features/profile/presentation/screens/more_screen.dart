@@ -6,6 +6,11 @@ import '../../../../core/localization/app_strings.dart';
 import '../../../../core/localization/locale_provider.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
 import 'local_profile_screen.dart';
+import 'legal/terms_of_use_screen.dart';
+import 'legal/privacy_policy_screen.dart';
+import 'subscription_screen.dart';
+import 'style_preferences_screen.dart';
+import 'outfit_schedule_screen.dart';
 import 'body_measurement_screen.dart';
 import 'location_timezone_screen.dart';
 
@@ -26,7 +31,7 @@ class MoreScreen extends ConsumerWidget {
               Text(
                 strings.navMore,
                 style: TextStyle(
-                  color: Colors.white,
+                  color: Theme.of(context).textTheme.bodyLarge?.color ?? Colors.white,
                   fontSize: 28,
                   fontWeight: FontWeight.w700,
                   letterSpacing: -0.5,
@@ -57,7 +62,7 @@ class MoreScreen extends ConsumerWidget {
                             Text(
                               strings.accountSettings,
                               style: TextStyle(
-                                color: Colors.white,
+                                color: Theme.of(context).textTheme.bodyLarge?.color ?? Colors.white,
                                 fontSize: 18,
                                 fontWeight: FontWeight.w600,
                               ),
@@ -108,7 +113,13 @@ class MoreScreen extends ConsumerWidget {
                     _SettingsTile(
                         title: strings.stylePreferences,
                         icon: Icons.palette_rounded,
-                        onTap: () {}),
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                                builder: (_) => const StylePreferencesScreen()),
+                          );
+                        }),
                     Divider(height: 1, color: Theme.of(context).dividerColor),
                     _SettingsTile(
                         title: strings.locationTimezone,
@@ -124,7 +135,13 @@ class MoreScreen extends ConsumerWidget {
                     _SettingsTile(
                         title: strings.outfitSchedule,
                         icon: Icons.calendar_today_rounded,
-                        onTap: () {}),
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                                builder: (_) => const OutfitScheduleScreen()),
+                          );
+                        }),
                     Divider(height: 1, color: Theme.of(context).dividerColor),
                     _SettingsTile(
                         title: strings.language,
@@ -147,7 +164,13 @@ class MoreScreen extends ConsumerWidget {
                     _SettingsTile(
                         title: strings.subscription,
                         icon: Icons.credit_card_rounded,
-                        onTap: () {}),
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                                builder: (_) => const SubscriptionScreen()),
+                          );
+                        }),
                   ],
                 ),
               ),
@@ -163,13 +186,25 @@ class MoreScreen extends ConsumerWidget {
                         title: strings.termsOfUse,
                         icon: Icons.description_rounded,
                         hasExternalIcon: true,
-                        onTap: () {}),
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                                builder: (_) => const TermsOfUseScreen()),
+                          );
+                        }),
                     Divider(height: 1, color: Theme.of(context).dividerColor),
                     _SettingsTile(
                         title: strings.privacyPolicy,
                         icon: Icons.security_rounded,
                         hasExternalIcon: true,
-                        onTap: () {}),
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                                builder: (_) => const PrivacyPolicyScreen()),
+                          );
+                        }),
                   ],
                 ),
               ),

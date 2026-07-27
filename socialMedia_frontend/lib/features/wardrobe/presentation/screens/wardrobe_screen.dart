@@ -19,6 +19,8 @@ class WardrobeScreen extends ConsumerStatefulWidget {
 class _WardrobeScreenState extends ConsumerState<WardrobeScreen> {
   final ApiService _apiService = ApiService();
   late Future<List<dynamic>> _clothesFuture;
+  String? _selectedCategory;
+  String _searchQuery = '';
 
   @override
   void initState() {
@@ -52,10 +54,10 @@ class _WardrobeScreenState extends ConsumerState<WardrobeScreen> {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const Text(
+                  Text(
                     'My Wardrobe',
                     style: TextStyle(
-                      color: Colors.white,
+                      color: Theme.of(context).textTheme.bodyLarge?.color ?? Colors.white,
                       fontSize: 24,
                       fontWeight: FontWeight.w700,
                       letterSpacing: -0.5,
@@ -64,7 +66,7 @@ class _WardrobeScreenState extends ConsumerState<WardrobeScreen> {
                   Row(
                     children: [
                       IconButton(
-                        icon: const Icon(Icons.style_rounded, color: Colors.white, size: 28),
+                        icon: Icon(Icons.style_rounded, color: Theme.of(context).iconTheme.color ?? Colors.white, size: 28),
                         tooltip: 'Kombinlerim',
                         onPressed: () {
                           Navigator.push(
@@ -74,8 +76,8 @@ class _WardrobeScreenState extends ConsumerState<WardrobeScreen> {
                         },
                       ),
                       IconButton(
-                        icon: const Icon(Icons.add_circle_outline_rounded,
-                            color: Colors.white, size: 28),
+                        icon: Icon(Icons.add_circle_outline_rounded,
+                            color: Theme.of(context).iconTheme.color ?? Colors.white, size: 28),
                         onPressed: () {
                           Navigator.push(
                             context,
@@ -111,8 +113,13 @@ class _WardrobeScreenState extends ConsumerState<WardrobeScreen> {
                     const SizedBox(width: 8),
                     Expanded(
                       child: TextField(
+                        onChanged: (val) {
+                          setState(() {
+                            _searchQuery = val.toLowerCase();
+                          });
+                        },
                         style:
-                            const TextStyle(color: Colors.white, fontSize: 14),
+                            TextStyle(color: Theme.of(context).textTheme.bodyLarge?.color ?? Colors.white, fontSize: 14),
                         decoration: InputDecoration(
                           hintText: 'Search items...',
                           hintStyle: TextStyle(
@@ -140,13 +147,50 @@ class _WardrobeScreenState extends ConsumerState<WardrobeScreen> {
               padding: const EdgeInsets.symmetric(horizontal: 16.0),
               child: Row(
                 children: [
-                  _FilterChip(label: 'Favorites'),
-                  _FilterChip(label: 'Shirt'),
-                  _FilterChip(label: 'T-Shirt'),
-                  _FilterChip(label: 'Pants'),
-                  _FilterChip(label: 'Jeans'),
-                  _FilterChip(label: 'Shoes'),
-                  _FilterChip(label: 'Accessories'),
+                  _FilterChip(
+                    label: 'Favorites',
+                    isSelected: _selectedCategory == 'Favorites',
+                    onTap: () => setState(() => _selectedCategory =
+                        _selectedCategory == 'Favorites' ? null : 'Favorites'),
+                  ),
+                  _FilterChip(
+                    label: 'Shirt',
+                    isSelected: _selectedCategory == 'Shirt',
+                    onTap: () => setState(() => _selectedCategory =
+                        _selectedCategory == 'Shirt' ? null : 'Shirt'),
+                  ),
+                  _FilterChip(
+                    label: 'T-Shirt',
+                    isSelected: _selectedCategory == 'T-Shirt',
+                    onTap: () => setState(() => _selectedCategory =
+                        _selectedCategory == 'T-Shirt' ? null : 'T-Shirt'),
+                  ),
+                  _FilterChip(
+                    label: 'Pants',
+                    isSelected: _selectedCategory == 'Pants',
+                    onTap: () => setState(() => _selectedCategory =
+                        _selectedCategory == 'Pants' ? null : 'Pants'),
+                  ),
+                  _FilterChip(
+                    label: 'Jeans',
+                    isSelected: _selectedCategory == 'Jeans',
+                    onTap: () => setState(() => _selectedCategory =
+                        _selectedCategory == 'Jeans' ? null : 'Jeans'),
+                  ),
+                  _FilterChip(
+                    label: 'Shoes',
+                    isSelected: _selectedCategory == 'Shoes',
+                    onTap: () => setState(() => _selectedCategory =
+                        _selectedCategory == 'Shoes' ? null : 'Shoes'),
+                  ),
+                  _FilterChip(
+                    label: 'Accessories',
+                    isSelected: _selectedCategory == 'Accessories',
+                    onTap: () => setState(() => _selectedCategory =
+                        _selectedCategory == 'Accessories'
+                            ? null
+                            : 'Accessories'),
+                  ),
                 ],
               ),
             ),
@@ -171,7 +215,30 @@ class _WardrobeScreenState extends ConsumerState<WardrobeScreen> {
                     );
                   }
 
-                  final clothes = snapshot.data ?? [];
+                  var clothes = snapshot.data ?? [];
+                  
+                  // Apply Category Filter
+                  if (_selectedCategory != null) {
+                    if (_selectedCategory == 'Favorites') {
+                      // Mock favorites filtering (assuming is_favorite property or just show random for now if missing)
+                      clothes = clothes.where((c) => c['is_favorite'] == true).toList();
+                    } else {
+                      clothes = clothes.where((c) {
+                        final type = c['tur']?.toString().toLowerCase() ?? '';
+                        return type.contains(_selectedCategory!.toLowerCase());
+                      }).toList();
+                    }
+                  }
+
+                  // Apply Search Query Filter
+                  if (_searchQuery.isNotEmpty) {
+                    clothes = clothes.where((c) {
+                        final type = c['tur']?.toString().toLowerCase() ?? '';
+                        final color = c['renk']?.toString().toLowerCase() ?? '';
+                        final style = c['stil']?.toString().toLowerCase() ?? '';
+                        return type.contains(_searchQuery) || color.contains(_searchQuery) || style.contains(_searchQuery);
+                    }).toList();
+                  }
 
                   return Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -339,24 +406,38 @@ class _EmptyClothIcon extends StatelessWidget {
 
 class _FilterChip extends StatelessWidget {
   final String label;
+  final bool isSelected;
+  final VoidCallback onTap;
 
-  const _FilterChip({required this.label});
+  const _FilterChip({
+    required this.label,
+    required this.isSelected,
+    required this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.only(right: 8.0),
-      padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-      decoration: BoxDecoration(
-        color: Theme.of(context).cardColor,
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: Text(
-        label,
-        style: const TextStyle(
-          color: Colors.white,
-          fontSize: 13,
-          fontWeight: FontWeight.w500,
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        margin: const EdgeInsets.only(right: 8.0),
+        padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+        decoration: BoxDecoration(
+          color: isSelected ? Theme.of(context).colorScheme.primary : Theme.of(context).cardColor,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: isSelected ? Theme.of(context).colorScheme.primary : Theme.of(context).dividerColor,
+          ),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            color: isSelected 
+                ? (Theme.of(context).brightness == Brightness.dark ? Colors.white : Colors.black)
+                : Theme.of(context).textTheme.bodyMedium?.color ?? Colors.white,
+            fontSize: 13,
+            fontWeight: FontWeight.w500,
+          ),
         ),
       ),
     );
