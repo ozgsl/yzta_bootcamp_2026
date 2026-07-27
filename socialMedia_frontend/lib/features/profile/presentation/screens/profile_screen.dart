@@ -591,7 +591,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                         onPressed: () async {
                           Navigator.pop(ctx);
                           await ref.read(feedProvider.notifier).toggleSave(post.id);
-                          ref.read(profileProvider.notifier).loadProfile(targetUserId);
+                          ref.read(profileProvider.notifier).loadProfile(targetUserId, ref.read(authProvider).currentUserId ?? targetUserId);
                         },
                       ),
                     ] else if (provider.isOwnProfile) ...[

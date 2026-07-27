@@ -29,17 +29,8 @@ class AppConfig {
   static String get apiHost {
     if (_definedHost.isNotEmpty) return _definedHost;
 
-    // Ortam değişkeni tanımlanmamışsa platforma göre varsayılan
-    try {
-      if (Platform.isAndroid) {
-        // Android emülatörde host makinesi 10.0.2.2'dir
-        return '10.0.2.2';
-      }
-    } catch (_) {
-      // Platform.isAndroid web'de exception fırlatır — ignore
-    }
-    // iOS fiziksel cihaz / diğer platformlar için localhost
-    return 'localhost';
+    // Use local machine IP for physical device testing
+    return '192.168.1.105';
   }
 
   static int get apiPort => _definedPort;
