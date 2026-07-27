@@ -560,22 +560,21 @@ class ApiService {
   Future<String> suggestCaption({
     required List<OutfitItem> outfitItems,
     String? styleHint,
-    String? imageUrl, // Yüklenen görselin URL'si (Gemini Vision için)
+    String? imageUrl,
+    Map<String, dynamic>? aiAnalysis, // FashionSigLIP sonucu (opsiyonel)
   }) async {
     final body = <String, dynamic>{
       'outfit_items': outfitItems.map((item) => item.toJson()).toList(),
     };
-    if (styleHint != null && styleHint.isNotEmpty) {
-      body['style_hint'] = styleHint;
-    }
-    if (imageUrl != null && imageUrl.isNotEmpty) {
-      body['image_url'] = imageUrl; // Görsel URL'sini backend'e gönder
-    }
+    if (styleHint != null && styleHint.isNotEmpty) body['style_hint'] = styleHint;
+    if (imageUrl != null && imageUrl.isNotEmpty) body['image_url'] = imageUrl;
+    if (aiAnalysis != null) body['ai_analysis'] = aiAnalysis;
     final data = await _post('/captions/suggest', body);
     // Backend MessageResponse: {success, message, data: {caption: "..."}}
     final nested = data['data'] as Map<String, dynamic>?;
     return nested?['caption'] as String? ?? '';
   }
+
 
   // --- Epic 3: Wardrobe & AI Stylist ---
   Future<List<dynamic>> getClothes(String userId) async {
@@ -586,9 +585,25 @@ class ApiService {
     return await _post('/wardrobe/items?user_id=$userId', itemData);
   }
 
-  Future<Map<String, dynamic>> analyzeClothingItem(String base64Image) async {
-    return await _post('/captions/analyze-item', {'image_b64': base64Image});
+  /// Görsel yükler ve FashionSigLIP ile otomatik analiz döner.
+  /// Dönen map: { 'url': String, 'filename': String, 'ai_analysis': Map? }
+  Future<Map<String, dynamic>> uploadImageForAnalysis(File file) async {
+    final uri = Uri.parse('$baseUrl/captions/upload');
+    final request = http.MultipartRequest('POST', uri)
+      ..files.add(await http.MultipartFile.fromPath('file', file.path));
+    final streamed = await request.send().timeout(_timeout);
+    final response = await http.Response.fromStream(streamed);
+    if (response.statusCode == 200) {
+      return jsonDecode(response.body) as Map<String, dynamic>;
+    }
+    throw ApiException('Görsel yüklenemedi', statusCode: response.statusCode);
   }
+
+  /// Var olan bir görsel URL'si ile FashionSigLIP analizi çalıştırır.
+  Future<Map<String, dynamic>> analyzeClothingItem(String imageUrl) async {
+    return await _post('/wardrobe/items/analyze', {'image_url': imageUrl});
+  }
+
 
   Future<dynamic> updateCloth(int itemId, Map<String, dynamic> itemData) async {
     return await _put('/wardrobe/items/$itemId', itemData);

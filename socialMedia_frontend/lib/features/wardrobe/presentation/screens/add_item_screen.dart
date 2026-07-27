@@ -2,8 +2,6 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:http/http.dart' as http;
-import 'dart:convert';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../features/auth/presentation/providers/auth_provider.dart';
 import '../../../../services/api_service.dart';
@@ -21,6 +19,8 @@ class _AddItemScreenState extends ConsumerState<AddItemScreen> {
   File? _selectedImage;
   bool _isLoading = false;
   bool _isAnalyzing = false;
+  String? _uploadedImageUrl;         // Yükleme sonrası backend URL'si
+  Map<String, dynamic>? _aiAnalysis; // FashionSigLIP analiz sonucu
 
   // Form state
   String _tur = 'Tişört';
@@ -76,101 +76,130 @@ class _AddItemScreenState extends ConsumerState<AddItemScreen> {
       imageQuality: 75,
       maxWidth: 1024,
     );
-    if (xfile != null) {
-      setState(() {
-        _selectedImage = File(xfile.path);
-        _isAnalyzing = true;
-      });
+    if (xfile == null) return;
 
-      try {
-        final bytes = await xfile.readAsBytes();
-        final base64Image = base64Encode(bytes);
-        final result = await ApiService().analyzeClothingItem(base64Image);
+    setState(() {
+      _selectedImage = File(xfile.path);
+      _isAnalyzing = true;
+      _uploadedImageUrl = null;
+      _aiAnalysis = null;
+    });
 
-        if (result['success'] == true && result['data'] != null) {
-          final data = result['data'];
-          if (mounted) {
-            setState(() {
-              if (data['tur'] != null && _turler.contains(data['tur'])) {
-                _tur = data['tur'];
-              }
-              if (data['renk'] != null && _renkler.contains(data['renk'])) {
-                _renk = data['renk'];
-              }
-            });
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text('AI analyzed the clothing successfully! ✨'),
-                backgroundColor: Theme.of(context).colorScheme.primary,
-              ),
+    try {
+      // Tek istekte yükle + FashionSigLIP analizi al
+      final result = await ApiService().uploadImageForAnalysis(_selectedImage!);
+      final url = result['url'] as String?;
+      final analysis = result['ai_analysis'] as Map<String, dynamic>?;
+
+      if (mounted) {
+        setState(() {
+          _uploadedImageUrl = url;
+          _aiAnalysis = analysis;
+
+          if (analysis != null) {
+            // Kıyafet türü — case-insensitive eşleştirme
+            final turRaw = (analysis['tur'] as String? ?? '');
+            final matchedTur = _turler.firstWhere(
+              (t) => t.toLowerCase() == turRaw.toLowerCase(),
+              orElse: () => '',
             );
+            if (matchedTur.isNotEmpty) _tur = matchedTur;
+
+            // Renk
+            final renkRaw = (analysis['renk'] as String? ?? '');
+            final matchedRenk = _renkler.firstWhere(
+              (r) => r.toLowerCase() == renkRaw.toLowerCase(),
+              orElse: () => '',
+            );
+            if (matchedRenk.isNotEmpty) _renk = matchedRenk;
+
+            // Mevsim
+            final mevsimRaw = (analysis['mevsim'] as String? ?? '');
+            final matchedMevsim = _mevsimler.firstWhere(
+              (m) => m.toLowerCase() == mevsimRaw.toLowerCase(),
+              orElse: () => '',
+            );
+            if (matchedMevsim.isNotEmpty) _mevsim = matchedMevsim;
           }
-        }
-      } catch (e) {
-        debugPrint("AI Analyze Error: $e");
-      } finally {
-        if (mounted) {
-          setState(() => _isAnalyzing = false);
+        });
+
+        if (analysis != null) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(
+              '✨ AI analiz: ${analysis['tur'] ?? ''} '
+              '(${analysis['renk'] ?? ''}, ${analysis['stil_etiketi'] ?? ''})',
+            ),
+            backgroundColor: Theme.of(context).colorScheme.primary,
+            duration: const Duration(seconds: 3),
+          ));
+        } else if (url != null) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Görsel yüklendi')),
+          );
         }
       }
+    } catch (e) {
+      debugPrint('Upload/Analyze error: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Yükleme hatası: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isAnalyzing = false);
     }
-  }
-
-  Future<String?> _uploadImage(File file) async {
-    final uri = Uri.parse('${ApiService.baseUrl}/captions/upload');
-    final request = http.MultipartRequest('POST', uri)
-      ..files.add(await http.MultipartFile.fromPath('file', file.path));
-    final streamed = await request.send();
-    final response = await http.Response.fromStream(streamed);
-    if (response.statusCode == 200) {
-      final data = jsonDecode(response.body) as Map<String, dynamic>;
-      return data['url'] as String?;
-    }
-    return null;
   }
 
   Future<void> _submit() async {
     final userId = ref.read(authProvider).currentUserId;
     if (userId == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('You need to log in.')),
+        const SnackBar(content: Text('Giriş yapmanız gerekiyor.')),
       );
       return;
     }
 
     setState(() => _isLoading = true);
     try {
-      String? imageUrl;
-      if (_selectedImage != null) {
-        imageUrl = await _uploadImage(_selectedImage!);
+      // Görsel zaten _pickImage'da yüklendi; yoksa şimdi yükle
+      String? imageUrl = _uploadedImageUrl;
+      if (_selectedImage != null && imageUrl == null) {
+        final uploadResult =
+            await ApiService().uploadImageForAnalysis(_selectedImage!);
+        imageUrl = uploadResult['url'] as String?;
       }
 
-      await ApiService().addCloth(userId, {
-        'tur': _tur,
-        'renk': _renk,
+      final itemData = <String, dynamic>{
+        'tur': _tur.toLowerCase(),
+        'renk': _renk.toLowerCase(),
         'marka': _markaCtrl.text.isEmpty ? null : _markaCtrl.text,
         'beden': _bedenCtrl.text.isEmpty ? null : _bedenCtrl.text,
-        'mevsim': _mevsim,
+        'mevsim': _mevsim.toLowerCase(),
         'temiz': true,
         if (imageUrl != null) 'foto_url': imageUrl,
-      });
+        if (_aiAnalysis?['stil_etiketi'] != null)
+          'stil_etiketi': _aiAnalysis!['stil_etiketi'],
+      };
+
+      await ApiService().addCloth(userId, itemData);
 
       if (mounted) {
-        Navigator.pop(context, true); // true = yenile
+        Navigator.pop(context, true);
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('✅ Clothing added successfully!')),
+          const SnackBar(content: Text('✅ Kıyafet başarıyla eklendi!')),
         );
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e')),
+          SnackBar(content: Text('Hata: $e')),
         );
       }
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
   }
+
 
   void _showImageSourceSheet() {
     showModalBottomSheet(

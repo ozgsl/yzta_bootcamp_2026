@@ -3,10 +3,12 @@ import sqlite3
 from pydantic import BaseModel
 from typing import Optional, List
 import json
+from pathlib import Path
 
 from app.core.database import get_db
 from app.repositories.item_repository import ItemRepository
 from app.services import ollama_client
+from app.services.fashion_classifier import classifier as fashion_classifier
 
 router = APIRouter(tags=["Wardrobe"])
 
@@ -167,4 +169,106 @@ def manuel_kombin_olustur(istek: ManualOutfitCreateRequest, db: sqlite3.Connecti
         aciklama=istek.aciklama,
     )
     return {"oneri_id": oneri_id, "mesaj": "Kombin başarıyla kaydedildi."}
+
+
+# ---------------------------------------------------------------------------
+# FashionSigLIP — Kıyafet Formu Otomatik Doldurma
+# ---------------------------------------------------------------------------
+
+class AnalyzeKiyafetIstek(BaseModel):
+    """
+    Görsel URL veya base64 alır; FashionSigLIP ile analiz eder.
+    Frontend'in 'Otomatik Doldur' butonu bu endpoint'i kullanır.
+    """
+    image_url: Optional[str] = None
+    image_b64: Optional[str] = None
+
+
+@router.post("/items/analyze")
+def kiyafet_gorseli_analiz_et(istek: AnalyzeKiyafetIstek):
+    """
+    Kıyafet görselini FashionSigLIP ile analiz eder.
+
+    Dönen alanlar doğrudan KiyafetEkleIstek modeline karşılık gelir:
+    - tur           → tişört, pantolon, elbise ...
+    - renk          → siyah, beyaz, mavi ...
+    - stil_etiketi  → gündelik, şık, spor ...
+    - mevsim        → yaz, kış, tüm sezon ...
+    - post_category → üst giyim, alt giyim, ayakkabı, aksesuar, dış giyim, diğer
+
+    Model yüklü değilse success=False + açıklayıcı hata döner.
+    """
+    if not fashion_classifier.is_ready:
+        return {
+            "success": False,
+            "message": "FashionSigLIP modeli henüz yüklenmedi veya yüklenemedi.",
+            "data": None,
+        }
+
+    # --- Görsel kaynağı belirle ---
+    image_b64 = istek.image_b64
+    image_path: Optional[Path] = None
+
+    if not image_b64 and istek.image_url:
+        # Yerel static/uploads dosyası mı?
+        if "static/uploads/" in istek.image_url:
+            from app.services.ollama_caption_service import UPLOADS_DIR
+            filename = istek.image_url.split("static/uploads/")[-1].split("?")[0]
+            local = UPLOADS_DIR / filename
+            if local.exists():
+                image_path = local
+            else:
+                # URL üzerinden indir
+                try:
+                    import httpx
+                    with httpx.Client(timeout=10) as client:
+                        resp = client.get(istek.image_url)
+                        resp.raise_for_status()
+                        import base64 as b64lib
+                        image_b64 = b64lib.b64encode(resp.content).decode()
+                except Exception as e:
+                    return {"success": False, "message": f"Görsel indirilemedi: {e}"}
+        else:
+            # Harici URL — indir
+            try:
+                import httpx, base64 as b64lib
+                with httpx.Client(timeout=10) as client:
+                    resp = client.get(istek.image_url)
+                    resp.raise_for_status()
+                    image_b64 = b64lib.b64encode(resp.content).decode()
+            except Exception as e:
+                return {"success": False, "message": f"Görsel indirilemedi: {e}"}
+
+    if not image_b64 and image_path is None:
+        return {
+            "success": False,
+            "message": "image_url veya image_b64 sağlanmalı.",
+        }
+
+    result = fashion_classifier.classify_image(
+        image_path=image_path,
+        image_b64=image_b64,
+    )
+
+    if not result.get("success"):
+        return {
+            "success": False,
+            "message": result.get("error", "Sınıflandırma başarısız."),
+            "data": None,
+        }
+
+    return {
+        "success": True,
+        "message": "Kıyafet analizi tamamlandı.",
+        "data": {
+            "tur": result["tur"],
+            "renk": result["renk"],
+            "stil_etiketi": result["stil_etiketi"],
+            "mevsim": result["mevsim"],
+            "post_category": result["post_category"],
+            "confidence": result["confidence"],
+            "alternatifler": result.get("alternatifler", []),
+        },
+    }
+
 
