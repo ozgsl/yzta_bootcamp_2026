@@ -2,8 +2,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:http/http.dart' as http;
-import 'dart:convert';
 import '../../../../features/feed/domain/models/outfit_item_model.dart';
 import '../../../../services/api_service.dart';
 
@@ -37,6 +35,18 @@ class CreatePostProvider extends ChangeNotifier {
 
   String _suggestedCaption = '';
   String get suggestedCaption => _suggestedCaption;
+
+  /// LLaVA tarafından tespit edilen kıyafetler
+  List<Map<String, dynamic>> _detectedItems = [];
+  List<Map<String, dynamic>> get detectedItems => _detectedItems;
+
+  /// Ollama tarafından üretilen kombin açıklaması
+  String _outfitStory = '';
+  String get outfitStory => _outfitStory;
+
+  /// Yüklenen görselin backend URL'si (outfit-story için)
+  String? _uploadedImageUrl;
+  String? get uploadedImageUrl => _uploadedImageUrl;
 
   String? _errorMessage;
   String? get errorMessage => _errorMessage;
@@ -102,21 +112,11 @@ class CreatePostProvider extends ChangeNotifier {
     }
   }
 
-  // ─── Görsel Upload ──────────────────────────────────────────
-  /// Seçili görseli backend'e yükler ve URL döndürür.
-  Future<String?> _uploadImage(File file) async {
+  /// Seçili görseli backend'e yükler ve URL + ai_analysis döndürür.
+  Future<Map<String, dynamic>?> _uploadImageWithAnalysis(File file) async {
     try {
-      final uri = Uri.parse('${ApiService.baseUrl}/captions/upload');
-      final request = http.MultipartRequest('POST', uri)
-        ..files.add(await http.MultipartFile.fromPath('file', file.path));
-      final streamed = await request.send();
-      final response = await http.Response.fromStream(streamed);
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body) as Map<String, dynamic>;
-        return data['url'] as String?;
-      }
-      debugPrint('Upload hatası: ${response.statusCode} ${response.body}');
-      return null;
+      final result = await _api.uploadImageForAnalysis(file);
+      return result;
     } catch (e) {
       debugPrint('Upload exception: $e');
       return null;
@@ -151,26 +151,67 @@ class CreatePostProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  // ─── AI Caption Önerisi ─────────────────────────────────────
+  // ─── AI Caption Önerisi ───────────────────────────────────────
+  /// Görsel seçilmişse: LLaVA+Ollama pipeline çalıştırır
+  /// Görsel yoksa: Eski llama3.2 metin fallback'ını kullanır
   Future<void> suggestCaption() async {
     _isSuggestingCaption = true;
     _errorMessage = null;
+    _detectedItems = [];
+    _outfitStory = '';
     notifyListeners();
 
     try {
-      // Kombin parçası seçilmemişse genel bir moda caption'ı iste
-      final items = _selectedOutfitItems.isNotEmpty
-          ? _selectedOutfitItems
-          : <OutfitItem>[
-              const OutfitItem(itemId: '', category: 'diğer', imageUrl: ''),
-            ];
+      if (_selectedImage != null) {
+        // ─── LLaVA + Ollama Pipeline ──────────────────────────────
+        // Adım 1: Görseli yükle, FashionSigLIP analizi al
+        final uploadResult = await _uploadImageWithAnalysis(_selectedImage!);
+        if (uploadResult == null) {
+          _errorMessage = 'Görsel yüklenemedi. Bağlantınızı kontrol edin.';
+          _isSuggestingCaption = false;
+          notifyListeners();
+          return;
+        }
 
-      final caption = await _api.suggestCaption(outfitItems: items);
-      if (caption.isNotEmpty) {
-        _suggestedCaption = caption;
-        _caption = caption;
+        final imageUrl = uploadResult['url'] as String? ?? '';
+        _uploadedImageUrl = imageUrl;
+        final aiAnalysis = uploadResult['ai_analysis'] as Map<String, dynamic>?;
+
+        // Adım 2: LLaVA tespit + Ollama hikaye pipeline
+        final storyResult = await _api.generateOutfitStory(
+          imageUrl: imageUrl,
+          aiAnalysis: aiAnalysis,
+        );
+
+        final detectedRaw = storyResult['detected_items'];
+        if (detectedRaw is List) {
+          _detectedItems = detectedRaw
+              .whereType<Map<String, dynamic>>()
+              .toList();
+        }
+
+        final story = storyResult['outfit_story'] as String? ?? '';
+        if (story.isNotEmpty) {
+          _outfitStory = story;
+          _caption = story;
+          _suggestedCaption = story;
+        } else {
+          _errorMessage = 'AI açıklama üretemedi, lütfen manuel yazın.';
+        }
       } else {
-        _errorMessage = 'AI caption üretemedi, lütfen manuel yazın.';
+        // ─── Görsel yoksa eski fallback ──────────────────────────────
+        final items = _selectedOutfitItems.isNotEmpty
+            ? _selectedOutfitItems
+            : <OutfitItem>[
+                const OutfitItem(itemId: '', category: 'diğer', imageUrl: ''),
+              ];
+        final caption = await _api.suggestCaption(outfitItems: items);
+        if (caption.isNotEmpty) {
+          _suggestedCaption = caption;
+          _caption = caption;
+        } else {
+          _errorMessage = 'AI caption üretemedi, lütfen manuel yazın.';
+        }
       }
     } on ApiException catch (e) {
       _errorMessage = e.message;
@@ -227,7 +268,13 @@ class CreatePostProvider extends ChangeNotifier {
         imageUrl = 'collage';
       } else {
         // 1. Görseli backend'e yükle
-        imageUrl = await _uploadImage(selectedImage!);
+        // AI öneri sırasında zaten yüklendiyse URL'yi yeniden kullan
+        if (_uploadedImageUrl != null && _uploadedImageUrl!.isNotEmpty) {
+          imageUrl = _uploadedImageUrl;
+        } else {
+          final uploadResult = await _uploadImageWithAnalysis(selectedImage!);
+          imageUrl = uploadResult?['url'] as String?;
+        }
 
         // Upload başarısız olursa hata göster
         if (imageUrl == null || imageUrl.isEmpty) {
@@ -266,7 +313,7 @@ class CreatePostProvider extends ChangeNotifier {
     }
   }
 
-  // ─── Formu Temizle ──────────────────────────────────────────
+  // ─── Formu Temizle ───────────────────────────────────────────
   void clearForm() {
     _selectedImage = null;
     _caption = '';
@@ -276,7 +323,11 @@ class CreatePostProvider extends ChangeNotifier {
     _isSubmitting = false;
     _isSuggestingCaption = false;
     _suggestedCaption = '';
+    _detectedItems = [];
+    _outfitStory = '';
+    _uploadedImageUrl = null;
     _errorMessage = null;
+    _isCollage = false;
     notifyListeners();
   }
 }

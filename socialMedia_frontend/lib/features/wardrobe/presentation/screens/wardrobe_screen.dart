@@ -21,6 +21,7 @@ class _WardrobeScreenState extends ConsumerState<WardrobeScreen> {
   late Future<List<dynamic>> _clothesFuture;
   String? _selectedCategory;
   String _searchQuery = '';
+  int _refreshKey = 0; // Bu değer değişince FutureBuilder zorunlu yenilenir
 
   @override
   void initState() {
@@ -29,13 +30,14 @@ class _WardrobeScreenState extends ConsumerState<WardrobeScreen> {
   }
 
   void _loadClothes() {
+    if (!mounted) return; // Widget ağacından kaldırıldıysa çık
     final userId = ref.read(authProvider).currentUserId ?? '';
     setState(() {
+      _refreshKey++; // Her çağrıda key artar — FutureBuilder kesinlikle yenilenir
       if (userId.isEmpty) {
         _clothesFuture = Future.value([]);
       } else {
         _clothesFuture = _apiService.getClothes(userId).then((clothes) {
-          // Temiz kıyafet sayısını kontrol et, az kalırsa bildirim gönder
           NotificationService().checkLowClothesCount(clothes);
           return clothes;
         });
@@ -83,14 +85,16 @@ class _WardrobeScreenState extends ConsumerState<WardrobeScreen> {
                       IconButton(
                         icon: Icon(Icons.add_circle_outline_rounded,
                             color: Theme.of(context).iconTheme.color ?? Colors.white, size: 28),
-                        onPressed: () {
-                          Navigator.push(
+                        onPressed: () async {
+                          final refreshed = await Navigator.push<bool>(
                             context,
                             MaterialPageRoute(
                                 builder: (_) => const AddItemScreen()),
-                          ).then((refreshed) {
-                            if (refreshed == true) _loadClothes();
-                          });
+                          );
+                          // true dönürse (başarılı ekleme) gardrıobu yenile
+                          if (refreshed == true && mounted) {
+                            _loadClothes();
+                          }
                         },
                       ),
                     ],
@@ -209,6 +213,7 @@ class _WardrobeScreenState extends ConsumerState<WardrobeScreen> {
 
             Expanded(
               child: FutureBuilder<List<dynamic>>(
+                key: ValueKey(_refreshKey), // key değişince Flutter tamamen yeniden build eder
                 future: _clothesFuture,
                 builder: (context, snapshot) {
                   if (snapshot.connectionState == ConnectionState.waiting) {
@@ -340,16 +345,17 @@ class _WardrobeScreenState extends ConsumerState<WardrobeScreen> {
                               final label = parts.join(', ');
 
                               return GestureDetector(
-                                onTap: () {
-                                  Navigator.push(
+                                onTap: () async {
+                                  final refreshed = await Navigator.push<bool>(
                                     context,
                                     MaterialPageRoute(
                                       builder: (_) =>
                                           EditItemScreen(initialItem: cloth),
                                     ),
-                                  ).then((refreshed) {
-                                    if (refreshed == true) _loadClothes();
-                                  });
+                                  );
+                                  if (refreshed == true && mounted) {
+                                    _loadClothes();
+                                  }
                                 },
                                 child: Container(
                                   decoration: BoxDecoration(

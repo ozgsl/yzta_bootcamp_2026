@@ -30,10 +30,14 @@ class GoogleAuthService {
   /// Exception fırlatır: gerçek hata.
   Future<String?> signIn() async {
     try {
-      // Önceki oturumu kapat (hesap seçim dialogu için)
-      await _googleSignIn.signOut();
+      // Önce sessiz giriş dene (önceki oturum varsa anında döner)
+      GoogleSignInAccount? googleUser = await _googleSignIn.signInSilently();
 
-      final googleUser = await _googleSignIn.signIn();
+      // Sessiz giriş başarısız → hesap seçim dialogu aç
+      if (googleUser == null) {
+        googleUser = await _googleSignIn.signIn();
+      }
+
       if (googleUser == null) {
         debugPrint('[GoogleAuth] Kullanıcı dialogu kapattı.');
         return null;
@@ -41,21 +45,20 @@ class GoogleAuthService {
 
       debugPrint('[GoogleAuth] Giriş yapıldı: ${googleUser.email}');
 
-      // ID token almayı dene (CLIENT_ID yoksa null gelebilir)
+      // ID token almayı dene — 5sn timeout
       String? idToken;
       try {
-        final googleAuth = await googleUser.authentication;
+        final googleAuth = await googleUser.authentication
+            .timeout(const Duration(seconds: 5));
         idToken = googleAuth.idToken;
         if (idToken == null) {
-          debugPrint(
-              '[GoogleAuth] ID token alınamadı — REVERSED_CLIENT_ID eksik olabilir.');
-          debugPrint('[GoogleAuth] Email + displayName ile devam ediliyor...');
+          debugPrint('[GoogleAuth] ID token alınamadı — email ile devam.');
         }
       } catch (e) {
-        debugPrint('[GoogleAuth] Authentication hatası: $e');
+        debugPrint('[GoogleAuth] Authentication hatası (devam): $e');
       }
 
-      // Backend'e gönder (id_token olmasa da email + displayName ile çalışır)
+      // Backend'e gönder
       final userId = await ApiService().loginWithGoogle(
         idToken: idToken ?? 'NO_TOKEN_${DateTime.now().millisecondsSinceEpoch}',
         email: googleUser.email,

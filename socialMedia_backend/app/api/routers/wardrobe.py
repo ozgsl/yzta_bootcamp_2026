@@ -248,21 +248,32 @@ def analyze_cloth_image(request: AnalyzeClothRequest):
                 local_path = Path("static/uploads") / filename
             
             if local_path.exists():
-                local_file_path = str(local_path)
+                result = fashion_classifier.classify_image(image_path=local_path)
             else:
-                local_file_path = image_url
+                # URL üzerinden base64'e çevirerek analiz et
+                import httpx as _httpx, base64 as _b64
+                with _httpx.Client(timeout=15.0) as c:
+                    r = c.get(image_url)
+                    r.raise_for_status()
+                image_b64 = _b64.b64encode(r.content).decode()
+                result = fashion_classifier.classify_image(image_b64=image_b64)
         else:
-            local_file_path = image_url
+            result = fashion_classifier.classify_image(image_path=Path(image_url))
 
-        prediction = fashion_classifier.predict(local_file_path)
-        
+        if not result.get("success"):
+            raise HTTPException(status_code=503, detail=f"AI model hatası: {result.get('error', 'Bilinmeyen hata')}")
+
         return {
-            "tur": prediction["predicted_category"],
-            "renk": prediction["predicted_color"],
-            "stil_etiketi": prediction["predicted_style"],
-            "guven_skoru": prediction["confidence"],
-            "detaylar": prediction["all_confidences"],
+            "tur": result["tur"],
+            "renk": result["renk"],
+            "stil_etiketi": result["stil_etiketi"],
+            "mevsim": result["mevsim"],
+            "post_category": result["post_category"],
+            "guven_skoru": result["confidence"],
+            "alternatifler": result.get("alternatifler", []),
         }
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Image analysis error: {str(e)}")
 
