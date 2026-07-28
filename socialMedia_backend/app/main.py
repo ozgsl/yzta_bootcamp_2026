@@ -13,7 +13,7 @@ from app.core.config import settings
 from app.core.database import init_db
 from app.api.routers import posts, feed, follows, users, auth, wardrobe, search, notifications, analytics
 from app.api.routers import likes 
-from app.services.ollama_caption_service import router as captions_router
+from app.services.ollama_caption_service import router as captions_router, OLLAMA_BASE_URL, OLLAMA_VISION_MODEL, OLLAMA_TEXT_MODEL
 from app.services.fashion_classifier import load_model_on_startup
 
 STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
@@ -21,14 +21,60 @@ STATIC_DIR.mkdir(exist_ok=True)
 (STATIC_DIR / "uploads").mkdir(exist_ok=True)
 
 
+async def _warmup_ollama_models():
+    """
+    Backend başladıktan sonra arka planda LLaVA ve llama3.2'yi belleğe yükler.
+    keep_alive=10m ile model 10 dakika bellekte kalır — sonraki istekler hızlı olur.
+    """
+    import asyncio
+    import httpx
+
+    await asyncio.sleep(4)  # Backend tamamen başlayana kadar bekle
+
+    async with httpx.AsyncClient(timeout=120.0) as client:
+        # LLaVA warm-up
+        try:
+            await client.post(
+                f"{OLLAMA_BASE_URL}/api/generate",
+                json={
+                    "model": OLLAMA_VISION_MODEL,
+                    "prompt": "Hi",
+                    "stream": False,
+                    "keep_alive": "10m",
+                    "options": {"num_predict": 1},
+                },
+            )
+            print(f"[Warm-up] ✅ LLaVA ({OLLAMA_VISION_MODEL}) belleğe yüklendi.")
+        except Exception as e:
+            print(f"[Warm-up] ⚠️ LLaVA yüklenemedi: {e}")
+
+        # llama3.2 warm-up
+        try:
+            await client.post(
+                f"{OLLAMA_BASE_URL}/api/generate",
+                json={
+                    "model": OLLAMA_TEXT_MODEL,
+                    "prompt": "Hi",
+                    "stream": False,
+                    "keep_alive": "10m",
+                    "options": {"num_predict": 1},
+                },
+            )
+            print(f"[Warm-up] ✅ Ollama ({OLLAMA_TEXT_MODEL}) belleğe yüklendi.")
+        except Exception as e:
+            print(f"[Warm-up] ⚠️ Ollama yüklenemedi: {e}")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Uygulama başlatılırken veritabanını oluşturur ve FashionSigLIP modelini yükler."""
+    """Uygulama başlatılırken veritabanını oluşturur, FashionSigLIP ve LLaVA modellerini ön-ısıtır."""
     init_db()
-    # FashionSigLIP — Kıyafet sınıflandırma modelini bellekte hazırla
     import asyncio
     loop = asyncio.get_event_loop()
+    # FashionSigLIP — Kıyafet sınıflandırma modelini bellekte hazırla
     await loop.run_in_executor(None, load_model_on_startup)
+    # LLaVA + Ollama — Arka planda modelleri belleğe yükle (warm-up)
+    asyncio.create_task(_warmup_ollama_models())
     yield
 
 

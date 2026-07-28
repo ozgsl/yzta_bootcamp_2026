@@ -575,6 +575,28 @@ class ApiService {
     return nested?['caption'] as String? ?? '';
   }
 
+  // ─── Outfit Story (LLaVA + Ollama Pipeline) ───────────────
+  /// Görsel yükleyip iki aşamalı pipeline çalıştırır:
+  /// 1. LLaVA → Kıyafetleri JSON olarak tespit eder
+  /// 2. llama3.2 → Kombinin neden seçildiğini açıklar
+  ///
+  /// Dönen map: {
+  ///   'detected_items': List<Map>,  // Tespit edilen kıyafetler
+  ///   'outfit_story': String,       // Detaylı açıklama metni
+  ///   'fashion_analysis': Map?      // FashionSigLIP verisi
+  /// }
+  Future<Map<String, dynamic>> generateOutfitStory({
+    String? imageUrl,
+    String? styleHint,
+    Map<String, dynamic>? aiAnalysis,
+  }) async {
+    final body = <String, dynamic>{};
+    if (imageUrl != null && imageUrl.isNotEmpty) body['image_url'] = imageUrl;
+    if (styleHint != null && styleHint.isNotEmpty) body['style_hint'] = styleHint;
+    if (aiAnalysis != null) body['ai_analysis'] = aiAnalysis;
+    return await _post('/captions/outfit-story', body);
+  }
+
 
   // --- Epic 3: Wardrobe & AI Stylist ---
   Future<List<dynamic>> getClothes(String userId) async {

@@ -414,17 +414,23 @@ class _CreatePostScreenState extends ConsumerState<CreatePostScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        // ─── LLaVA Tespit Chip'leri ──────────────────────────────
+        if (provider.detectedItems.isNotEmpty) ..._buildDetectedItemChips(provider),
+
+        // ─── Metin Alanı ────────────────────────────────────────
         TextFormField(
           controller: _captionController,
-          maxLines: 4,
-          maxLength: 500,
+          maxLines: 5,
+          maxLength: 1500,
           onChanged: (value) => provider.setCaption(value),
           style: TextStyle(
             color: Theme.of(context).textTheme.bodyLarge?.color ?? Colors.white,
             fontSize: 14,
           ),
           decoration: InputDecoration(
-            hintText: 'Kombinin hakkında bir şeyler yaz...',
+            hintText: provider.selectedImage != null
+                ? 'Kombin hikayeni yazın ya da AI\'a oluşturmasını bırakın...'
+                : 'Kombinin hakkında bir şeyler yaz...',
             counterStyle: TextStyle(
               color:
                   Theme.of(context).textTheme.bodySmall?.color ?? Colors.grey,
@@ -448,7 +454,8 @@ class _CreatePostScreenState extends ConsumerState<CreatePostScreen> {
           ),
         ),
         const SizedBox(height: AppTheme.spacingS),
-        // AI Öneri Butonu
+
+        // ─── AI Buton ────────────────────────────────────────
         SizedBox(
           width: double.infinity,
           child: OutlinedButton.icon(
@@ -464,11 +471,18 @@ class _CreatePostScreenState extends ConsumerState<CreatePostScreen> {
                       color: AppTheme.accentPurple,
                     ),
                   )
-                : const Text('✨', style: TextStyle(fontSize: 16)),
+                : Text(
+                    provider.selectedImage != null ? '🧥' : '✨',
+                    style: const TextStyle(fontSize: 16),
+                  ),
             label: Text(
               provider.isSuggestingCaption
-                  ? 'Öneri alınıyor...'
-                  : 'AI Öneri Al',
+                  ? (provider.selectedImage != null
+                      ? 'Kıyafetler analiz ediliyor...'
+                      : 'Öneri alınıyor...')
+                  : (provider.selectedImage != null
+                      ? 'Kombini Analiz Et (LLaVA + AI)'
+                      : 'AI Öneri Al'),
             ),
             style: OutlinedButton.styleFrom(
               foregroundColor: AppTheme.accentPurple,
@@ -481,8 +495,80 @@ class _CreatePostScreenState extends ConsumerState<CreatePostScreen> {
             ),
           ),
         ),
+
+        // ─── Pipeline bilgi notu ──────────────────────────────
+        if (provider.selectedImage != null)
+          Padding(
+            padding: const EdgeInsets.only(top: AppTheme.spacingXS),
+            child: Text(
+              'LLaVA ile kıyafet tespiti → Ollama ile kombin açıklaması',
+              style: TextStyle(
+                color: (Theme.of(context).textTheme.bodySmall?.color ?? Colors.grey)
+                    .withValues(alpha: 0.6),
+                fontSize: 10,
+              ),
+              textAlign: TextAlign.center,
+            ),
+          ),
       ],
     );
+  }
+
+  /// LLaVA tarafından tespit edilen kıyafetleri chip olarak gösterir
+  List<Widget> _buildDetectedItemChips(CreatePostProvider provider) {
+    final colors = [
+      const Color(0xFF6C63FF),
+      const Color(0xFF00B4D8),
+      const Color(0xFFFF6B9D),
+      const Color(0xFF43AA8B),
+      const Color(0xFFF9844A),
+      const Color(0xFF90BE6D),
+    ];
+
+    return [
+      const SizedBox(height: AppTheme.spacingXS),
+      Text(
+        'LLaVA ile Tespit Edilen Kıyafetler:',
+        style: TextStyle(
+          color: (Theme.of(context).textTheme.bodySmall?.color ?? Colors.grey)
+              .withValues(alpha: 0.8),
+          fontSize: 11,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+      const SizedBox(height: AppTheme.spacingXS),
+      Wrap(
+        spacing: 6,
+        runSpacing: 4,
+        children: provider.detectedItems.asMap().entries.map((entry) {
+          final idx = entry.key;
+          final item = entry.value;
+          final color = colors[idx % colors.length];
+          final label = [
+            item['tur'] ?? '',
+            if ((item['renk'] as String?)?.isNotEmpty == true) item['renk'],
+            if ((item['stil'] as String?)?.isNotEmpty == true) item['stil'],
+          ].join(' • ');
+          return Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: color.withValues(alpha: 0.4)),
+            ),
+            child: Text(
+              label,
+              style: TextStyle(
+                color: color,
+                fontSize: 11,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          );
+        }).toList(),
+      ),
+      const SizedBox(height: AppTheme.spacingS),
+    ];
   }
 
   Widget _buildAiConsentRow(CreatePostProvider provider) {
