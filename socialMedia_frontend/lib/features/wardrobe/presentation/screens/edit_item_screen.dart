@@ -144,6 +144,7 @@ class _EditItemScreenState extends ConsumerState<EditItemScreen> {
   }
 
   Future<void> _submit() async {
+    final s = ref.read(stringsProvider);
     final userId = ref.read(authProvider).currentUserId;
     if (userId == null) return;
 

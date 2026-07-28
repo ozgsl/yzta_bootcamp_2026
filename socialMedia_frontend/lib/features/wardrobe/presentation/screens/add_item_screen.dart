@@ -52,6 +52,7 @@ class _AddItemScreenState extends ConsumerState<AddItemScreen> {
   ];  static const _mevsimler = ['Yaz', 'Kış', 'İlkbahar', 'Sonbahar', 'Tüm Sezon'];
 
   Future<void> _pickImage(ImageSource source) async {
+    final s = ref.read(stringsProvider);
     final xfile = await _picker.pickImage(
       source: source,
       imageQuality: 75,
