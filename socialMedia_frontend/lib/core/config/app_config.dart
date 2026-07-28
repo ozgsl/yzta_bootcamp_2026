@@ -30,7 +30,7 @@ class AppConfig {
     if (_definedHost.isNotEmpty) return _definedHost;
 
     // Use local machine IP for physical device testing
-    return '192.168.1.101';
+    return '192.168.1.109';
   }
 
   static int get apiPort => _definedPort;
