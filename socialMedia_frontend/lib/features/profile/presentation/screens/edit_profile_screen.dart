@@ -4,7 +4,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:http/http.dart' as http;
-import 'package:csc_picker/csc_picker.dart';
+import 'package:country_picker/country_picker.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/localization/locale_provider.dart';
 import '../../../../services/api_service.dart';
@@ -217,57 +217,84 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
               ),
             ),
             const SizedBox(height: 24),
-            CSCPicker(
-              showStates: true,
-              showCities: true,
-              flagState: CountryFlag.DISABLE,
-              dropdownDecoration: BoxDecoration(
-                borderRadius: const BorderRadius.all(Radius.circular(10)),
-                color: Theme.of(context).scaffoldBackgroundColor,
-                border: Border.all(color: Theme.of(context).dividerColor, width: 1),
-              ),
-              disabledDropdownDecoration: BoxDecoration(
-                borderRadius: const BorderRadius.all(Radius.circular(10)),
-                color: Theme.of(context).dividerColor.withOpacity(0.1),
-                border: Border.all(color: Theme.of(context).dividerColor, width: 1),
-              ),
-              countrySearchPlaceholder: s.isTr ? "Ülke Ara" : "Search Country",
-              stateSearchPlaceholder: s.isTr ? "Bölge Ara" : "Search State",
-              citySearchPlaceholder: s.isTr ? "Şehir Ara" : "Search City",
-              countryDropdownLabel: s.isTr ? "Ülke Seçin" : "Select Country",
-              stateDropdownLabel: s.isTr ? "Bölge Seçin" : "Select State",
-              cityDropdownLabel: s.isTr ? "Şehir Seçin" : "Select City",
-              selectedItemStyle: TextStyle(
-                color: Theme.of(context).textTheme.bodyLarge?.color ?? Colors.white,
-                fontSize: 14,
-              ),
-              dropdownHeadingStyle: TextStyle(
-                color: Theme.of(context).textTheme.bodyLarge?.color ?? Colors.white,
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-              ),
-              dropdownItemStyle: const TextStyle(
-                color: Colors.black,
-                fontSize: 14,
-              ),
-              dialogRadius: 10.0,
-              searchBarRadius: 10.0,
-              onCountryChanged: (value) {
-                setState(() {
-                  _countryController.text = value;
-                  _cityController.text = ''; // Reset city when country changes
-                });
-              },
-              onStateChanged: (value) {
-                // We don't save state in DB currently, but CSC picker requires it
-              },
-              onCityChanged: (value) {
-                if (value != null) {
-                  setState(() {
-                    _cityController.text = value;
-                  });
-                }
-              },
+            Row(
+              children: [
+                Expanded(
+                  child: GestureDetector(
+                    onTap: () {
+                      showCountryPicker(
+                        context: context,
+                        showPhoneCode: false,
+                        countryListTheme: CountryListThemeData(
+                          backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+                          textStyle: TextStyle(color: Theme.of(context).textTheme.bodyLarge?.color ?? Colors.white),
+                          searchTextStyle: TextStyle(color: Theme.of(context).textTheme.bodyLarge?.color ?? Colors.white),
+                          bottomSheetHeight: 500,
+                          borderRadius: const BorderRadius.only(
+                            topLeft: Radius.circular(20.0),
+                            topRight: Radius.circular(20.0),
+                          ),
+                        ),
+                        onSelect: (Country country) {
+                          setState(() {
+                            _countryController.text = country.name;
+                          });
+                        },
+                      );
+                    },
+                    child: AbsorbPointer(
+                      child: TextField(
+                        controller: _countryController,
+                        style: TextStyle(
+                            color: Theme.of(context).textTheme.bodyLarge?.color ??
+                                Colors.white),
+                        decoration: InputDecoration(
+                          labelText: s.isTr ? 'Ülke' : 'Country',
+                          hintText: s.isTr ? 'Örn: Türkiye' : 'e.g. Turkey',
+                          labelStyle: TextStyle(
+                              color: Theme.of(context).textTheme.bodySmall?.color ??
+                                  Colors.grey),
+                          enabledBorder: UnderlineInputBorder(
+                              borderSide:
+                                  BorderSide(color: Theme.of(context).dividerColor)),
+                          focusedBorder: UnderlineInputBorder(
+                              borderSide: BorderSide(
+                                  color: Theme.of(context).colorScheme.primary)),
+                          suffixIcon: Icon(Icons.arrow_drop_down,
+                              color: Theme.of(context).textTheme.bodySmall?.color ?? Colors.grey),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: TextField(
+                    controller: _cityController,
+                    enabled: _countryController.text.isNotEmpty,
+                    style: TextStyle(
+                        color: _countryController.text.isNotEmpty
+                            ? (Theme.of(context).textTheme.bodyLarge?.color ?? Colors.white)
+                            : Colors.grey),
+                    decoration: InputDecoration(
+                      labelText: s.isTr ? 'Şehir (Hava Durumu)' : 'City (Weather)',
+                      hintText: s.isTr ? 'Örn: Antalya' : 'e.g. London',
+                      labelStyle: TextStyle(
+                          color: Theme.of(context).textTheme.bodySmall?.color ??
+                              Colors.grey),
+                      enabledBorder: UnderlineInputBorder(
+                          borderSide:
+                              BorderSide(color: Theme.of(context).dividerColor)),
+                      focusedBorder: UnderlineInputBorder(
+                          borderSide: BorderSide(
+                              color: Theme.of(context).colorScheme.primary)),
+                      disabledBorder: UnderlineInputBorder(
+                          borderSide:
+                              BorderSide(color: Theme.of(context).dividerColor.withOpacity(0.5))),
+                    ),
+                  ),
+                ),
+              ],
             ),
             const SizedBox(height: 24),
             TextField(
