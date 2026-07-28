@@ -232,8 +232,8 @@ class _WardrobeScreenState extends ConsumerState<WardrobeScreen> {
                   if (_selectedCategory != null) {
                     if (_selectedCategory == 'Favorites') {
                       clothes = clothes.where((c) => (c['is_favorite'] == 1 || c['is_favorite'] == true) && (c['temiz'] == 1 || c['temiz'] == true)).toList();
-                    } else if (_selectedCategory == 'Laundry Basket') {
-                      clothes = clothes.where((c) => c['temiz'] == 0 || c['temiz'] == false).toList();
+                    } else if (_selectedCategory == 'Laundry Basket' || _selectedCategory == 'Kirli Sepeti') {
+                      clothes = clothes.where((c) => c['temiz'] == 0 || c['temiz'] == false || c['is_dirty'] == 1 || c['is_dirty'] == true).toList();
                     } else {
                       clothes = clothes.where((c) {
                         final type = c['tur']?.toString().toLowerCase() ?? '';
@@ -330,10 +330,10 @@ class _WardrobeScreenState extends ConsumerState<WardrobeScreen> {
                               final parts = <String>[];
                               if (cloth['renk'] != null &&
                                   cloth['renk'].toString().isNotEmpty)
-                                parts.add(cloth['renk'].toString());
+                                parts.add(s.translateWardrobe(cloth['renk'].toString()));
                               if (cloth['tur'] != null &&
                                   cloth['tur'].toString().isNotEmpty)
-                                parts.add(cloth['tur'].toString());
+                                parts.add(s.translateWardrobe(cloth['tur'].toString()));
                               if (cloth['beden'] != null &&
                                   cloth['beden'].toString().isNotEmpty)
                                 parts.add(cloth['beden'].toString());
