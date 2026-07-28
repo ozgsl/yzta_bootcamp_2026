@@ -13,7 +13,7 @@ from app.services.fashion_classifier import classifier as fashion_classifier
 router = APIRouter(tags=["Wardrobe"])
 
 # --- Models ---
-class KiyafetEkleIstek(BaseModel):
+class ClothCreateRequest(BaseModel):
     tur: str
     renk: str
     renk_hex: Optional[str] = None
@@ -32,254 +32,233 @@ class KiyafetEkleIstek(BaseModel):
     temiz: bool = True
     foto_url: Optional[str] = None
 
-class ChatIstek(BaseModel):
+# Aliases for backwards compatibility
+KiyafetEkleIstek = ClothCreateRequest
+
+
+class ChatRequest(BaseModel):
     user_id: str
     mesaj: str
     hava_durumu: Optional[str] = None
 
-class KombinOnerIstek(BaseModel):
+ChatIstek = ChatRequest
+
+
+class OutfitRecommendRequest(BaseModel):
     user_id: str
     etkinlik: str
     hava_durumu: str
     stil_tercihi: Optional[str] = ""
+
+KombinOnerIstek = OutfitRecommendRequest
+
 
 class ManualOutfitCreateRequest(BaseModel):
     user_id: str
     item_ids: List[int]
     aciklama: str
 
+
+class AnalyzeClothRequest(BaseModel):
+    gorsel_url: str
+
+AnalyzeKiyafetIstek = AnalyzeClothRequest
+
+
 # --- Endpoints ---
 @router.post("/items")
-def kiyafet_ekle(user_id: str, istek: KiyafetEkleIstek, db: sqlite3.Connection = Depends(get_db)):
+def add_cloth(user_id: str, request: ClothCreateRequest, db: sqlite3.Connection = Depends(get_db)):
+    """Adds a new cloth item to user's wardrobe."""
     repo = ItemRepository(db)
-    veri = istek.model_dump()
-    kiyafet_id = repo.kiyafet_ekle(user_id=user_id, **veri)
-    return {"id": kiyafet_id, "mesaj": "Kıyafet eklendi"}
+    data = request.model_dump()
+    cloth_id = repo.add_cloth(user_id=user_id, **data)
+    return {"id": cloth_id, "mesaj": "Clothing item added", "message": "Clothing item added"}
+
 
 @router.get("/items/{user_id}")
-def kiyafetleri_listele(user_id: str, db: sqlite3.Connection = Depends(get_db)):
+def list_clothes(user_id: str, db: sqlite3.Connection = Depends(get_db)):
+    """Lists all clothes for a given user."""
     repo = ItemRepository(db)
-    return repo.kiyafetleri_getir(user_id)
+    return repo.get_clothes(user_id)
+
 
 @router.put("/items/{item_id}")
-def kiyafet_guncelle(item_id: int, istek: KiyafetEkleIstek, db: sqlite3.Connection = Depends(get_db)):
-    """Mevcut bir kıyafeti günceller."""
+def update_cloth(item_id: int, request: ClothCreateRequest, db: sqlite3.Connection = Depends(get_db)):
+    """Updates an existing cloth item."""
     repo = ItemRepository(db)
-    veri = istek.model_dump()
+    data = request.model_dump()
     try:
-        updated = repo.kiyafet_guncelle(kiyafet_id=item_id, **veri)
+        updated = repo.update_cloth(item_id=item_id, **data)
         if not updated:
-            raise HTTPException(status_code=404, detail="Kıyafet bulunamadı.")
-        return {"mesaj": "Kıyafet güncellendi", "id": item_id}
+            raise HTTPException(status_code=404, detail="Clothing item not found.")
+        return {"mesaj": "Clothing item updated", "message": "Clothing item updated", "id": item_id}
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Kıyafet güncellenirken hata: {str(e)}")
+        raise HTTPException(status_code=400, detail=f"Error updating clothing item: {str(e)}")
+
 
 @router.delete("/items/{item_id}")
-def kiyafet_sil(item_id: int, db: sqlite3.Connection = Depends(get_db)):
-    """Bir kıyafeti siler."""
+def delete_cloth(item_id: int, db: sqlite3.Connection = Depends(get_db)):
+    """Deletes a clothing item."""
     repo = ItemRepository(db)
     try:
-        deleted = repo.kiyafet_sil(kiyafet_id=item_id)
+        deleted = repo.delete_cloth(item_id=item_id)
         if not deleted:
-            raise HTTPException(status_code=404, detail="Kıyafet bulunamadı.")
-        return {"mesaj": "Kıyafet silindi", "id": item_id}
+            raise HTTPException(status_code=404, detail="Clothing item not found.")
+        return {"mesaj": "Clothing item deleted", "message": "Clothing item deleted", "id": item_id}
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Kıyafet silinirken hata: {str(e)}")
+        raise HTTPException(status_code=400, detail=f"Error deleting clothing item: {str(e)}")
+
 
 @router.post("/chat")
-def chat(istek: ChatIstek, db: sqlite3.Connection = Depends(get_db)):
+def chat(request: ChatRequest, db: sqlite3.Connection = Depends(get_db)):
+    """Handles AI Stylist chat messages."""
     repo = ItemRepository(db)
-    gecmis = repo.sohbet_gecmisini_getir(istek.user_id)
+    history = repo.get_chat_history(request.user_id)
     
-    baglamli_mesaj = istek.mesaj
-    if istek.hava_durumu:
-        baglamli_mesaj = f"[Sistem Notu: Kullanıcının bulunduğu konumda güncel hava durumu '{istek.hava_durumu}']\nKullanıcı: {istek.mesaj}"
+    context_message = request.mesaj
+    if request.hava_durumu:
+        context_message = f"[System Note: Current weather at location is '{request.hava_durumu}']\nUser: {request.mesaj}"
 
     try:
-        sonuc = ollama_client.sohbet_yaniti_al(gecmis, baglamli_mesaj)
+        result = ollama_client.get_chat_response(history, context_message)
     except Exception as e:
-        raise HTTPException(status_code=502, detail=f"AI hatası: {e}")
+        raise HTTPException(status_code=502, detail=f"AI service error: {e}")
         
-    repo.mesaj_kaydet(istek.user_id, "user", istek.mesaj)
-    repo.mesaj_kaydet(istek.user_id, "assistant", sonuc["asistan_mesaji"])
-    return sonuc
+    repo.save_chat_message(request.user_id, "user", request.mesaj)
+    repo.save_chat_message(request.user_id, "assistant", result.get("asistan_mesaji", ""))
+    return result
 
 
 @router.get("/chat/history/{user_id}")
 def chat_history(user_id: str, db: sqlite3.Connection = Depends(get_db)):
-    """Kullanıcının sohbet geçmişini döndürür."""
+    """Returns chat history for a user."""
     repo = ItemRepository(db)
-    return repo.sohbet_gecmisini_getir(user_id)
+    return repo.get_chat_history(user_id)
+
 
 @router.post("/outfit/suggest")
-def kombin_oner(istek: KombinOnerIstek, db: sqlite3.Connection = Depends(get_db)):
+def recommend_outfit(request: OutfitRecommendRequest, db: sqlite3.Connection = Depends(get_db)):
+    """Generates AI outfit recommendation."""
     repo = ItemRepository(db)
-    temiz_kiyafetler = repo.kiyafetleri_getir(istek.user_id, sadece_temiz=True)
+    clean_clothes = repo.get_clothes(request.user_id, clean_only=True)
     
-    if not temiz_kiyafetler:
-        raise HTTPException(status_code=400, detail="Temiz kıyafetin yok.")
+    if not clean_clothes:
+        raise HTTPException(status_code=400, detail="No clean clothes available.")
         
-    baglam = {
-        "etkinlik": istek.etkinlik,
-        "hava_durumu": istek.hava_durumu,
-        "stil_tercihi": istek.stil_tercihi or "",
+    context = {
+        "etkinlik": request.etkinlik,
+        "hava_durumu": request.hava_durumu,
+        "stil_tercihi": request.stil_tercihi or "",
     }
     
     try:
-        sonuc = ollama_client.kombin_onerisi_uret(baglam, temiz_kiyafetler)
+        result = ollama_client.generate_outfit_recommendation(context, clean_clothes)
     except Exception as e:
-        raise HTTPException(status_code=502, detail=f"Gemini API hatası: {e}")
+        raise HTTPException(status_code=502, detail=f"AI service error: {e}")
         
-    secilen_idler = sonuc["secilen_kiyafet_idleri"]
-    gecerli_idler = {k["id"] for k in temiz_kiyafetler}
-    secilen_idler = [i for i in secilen_idler if i in gecerli_idler]
+    selected_ids = result.get("secilen_kiyafet_idleri", [])
+    valid_ids = {c["id"] for c in clean_clothes}
+    selected_ids = [i for i in selected_ids if i in valid_ids]
     
-    oneri_id = repo.kombin_onerisi_kaydet(
-        user_id=istek.user_id,
-        baglam_json=json.dumps(baglam, ensure_ascii=False),
-        kiyafet_idleri=secilen_idler,
-        aciklama=sonuc["aciklama"],
+    recommendation_id = repo.save_outfit_recommendation(
+        user_id=request.user_id,
+        context_json=json.dumps(context, ensure_ascii=False),
+        item_ids=selected_ids,
+        description=result.get("aciklama", ""),
     )
     
-    secilen_kiyafetler_detay = [k for k in temiz_kiyafetler if k["id"] in secilen_idler]
+    selected_clothes_detail = [c for c in clean_clothes if c["id"] in selected_ids]
     
     return {
-        "oneri_id": oneri_id,
-        "secilen_kiyafetler": secilen_kiyafetler_detay,
-        "aciklama": sonuc["aciklama"],
+        "id": recommendation_id,
+        "aciklama": result.get("aciklama", ""),
+        "description": result.get("aciklama", ""),
+        "secilen_kiyafetler": selected_clothes_detail,
+        "selected_items": selected_clothes_detail,
     }
+
 
 @router.get("/outfits/{user_id}")
-def outfits_listele(user_id: str, db: sqlite3.Connection = Depends(get_db)):
-    """Kullanıcının daha önce oluşturduğu kombinleri getirir."""
+def list_outfits(user_id: str, db: sqlite3.Connection = Depends(get_db)):
+    """Lists saved outfit recommendations."""
     repo = ItemRepository(db)
-    return repo.kombin_onerilerini_getir(user_id)
+    return repo.get_outfit_recommendations(user_id)
 
-@router.post("/outfits/")
-def manuel_kombin_olustur(istek: ManualOutfitCreateRequest, db: sqlite3.Connection = Depends(get_db)):
-    """Kullanıcının manuel olarak seçtiği kıyafetlerden kombin oluşturur."""
+
+@router.post("/outfit/manual")
+def create_manual_outfit(request: ManualOutfitCreateRequest, db: sqlite3.Connection = Depends(get_db)):
+    """Creates a user-defined manual outfit."""
     repo = ItemRepository(db)
-    baglam_json = json.dumps({"type": "manual"})
-    oneri_id = repo.kombin_onerisi_kaydet(
-        user_id=istek.user_id,
-        baglam_json=baglam_json,
-        kiyafet_idleri=istek.item_ids,
-        aciklama=istek.aciklama,
+    context = {"etkinlik": "Manuel Kombin", "hava_durumu": "Belirtilmedi"}
+    outfit_id = repo.save_outfit_recommendation(
+        user_id=request.user_id,
+        context_json=json.dumps(context, ensure_ascii=False),
+        item_ids=request.item_ids,
+        description=request.aciklama
     )
-    return {"oneri_id": oneri_id, "mesaj": "Kombin başarıyla kaydedildi."}
+    return {"id": outfit_id, "mesaj": "Outfit created", "message": "Outfit created"}
 
 
-# ---------------------------------------------------------------------------
-# FashionSigLIP — Kıyafet Formu Otomatik Doldurma
-# ---------------------------------------------------------------------------
-
-class AnalyzeKiyafetIstek(BaseModel):
-    """
-    Görsel URL veya base64 alır; FashionSigLIP ile analiz eder.
-    Frontend'in 'Otomatik Doldur' butonu bu endpoint'i kullanır.
-    """
-    image_url: Optional[str] = None
-    image_b64: Optional[str] = None
-
-
-@router.post("/items/analyze")
-def kiyafet_gorseli_analiz_et(istek: AnalyzeKiyafetIstek):
-    """
-    Kıyafet görselini FashionSigLIP ile analiz eder.
-
-    Dönen alanlar doğrudan KiyafetEkleIstek modeline karşılık gelir:
-    - tur           → tişört, pantolon, elbise ...
-    - renk          → siyah, beyaz, mavi ...
-    - stil_etiketi  → gündelik, şık, spor ...
-    - mevsim        → yaz, kış, tüm sezon ...
-    - post_category → üst giyim, alt giyim, ayakkabı, aksesuar, dış giyim, diğer
-
-    Model yüklü değilse success=False + açıklayıcı hata döner.
-    """
-    if not fashion_classifier.is_ready:
-        return {
-            "success": False,
-            "message": "FashionSigLIP modeli henüz yüklenmedi veya yüklenemedi.",
-            "data": None,
-        }
-
-    # --- Görsel kaynağı belirle ---
-    image_b64 = istek.image_b64
-    image_path: Optional[Path] = None
-
-    if not image_b64 and istek.image_url:
-        # Yerel static/uploads dosyası mı?
-        if "static/uploads/" in istek.image_url:
-            from app.services.ollama_caption_service import UPLOADS_DIR
-            filename = istek.image_url.split("static/uploads/")[-1].split("?")[0]
-            local = UPLOADS_DIR / filename
-            if local.exists():
-                image_path = local
+@router.post("/analyze-image")
+def analyze_cloth_image(request: AnalyzeClothRequest):
+    """Analyzes clothing image using FashionSigLIP AI model."""
+    image_url = request.gorsel_url
+    if not image_url:
+        raise HTTPException(status_code=400, detail="gorsel_url is required.")
+        
+    try:
+        if image_url.startswith("http://") or image_url.startswith("https://"):
+            filename = image_url.split("/")[-1]
+            local_path = Path("uploads") / filename
+            if not local_path.exists():
+                local_path = Path("static/uploads") / filename
+            
+            if local_path.exists():
+                local_file_path = str(local_path)
             else:
-                # URL üzerinden indir
-                try:
-                    import httpx
-                    with httpx.Client(timeout=10) as client:
-                        resp = client.get(istek.image_url)
-                        resp.raise_for_status()
-                        import base64 as b64lib
-                        image_b64 = b64lib.b64encode(resp.content).decode()
-                except Exception as e:
-                    return {"success": False, "message": f"Görsel indirilemedi: {e}"}
+                local_file_path = image_url
         else:
-            # Harici URL — indir
-            try:
-                import httpx, base64 as b64lib
-                with httpx.Client(timeout=10) as client:
-                    resp = client.get(istek.image_url)
-                    resp.raise_for_status()
-                    image_b64 = b64lib.b64encode(resp.content).decode()
-            except Exception as e:
-                return {"success": False, "message": f"Görsel indirilemedi: {e}"}
+            local_file_path = image_url
 
-    if not image_b64 and image_path is None:
+        prediction = fashion_classifier.predict(local_file_path)
+        
         return {
-            "success": False,
-            "message": "image_url veya image_b64 sağlanmalı.",
+            "tur": prediction["predicted_category"],
+            "renk": prediction["predicted_color"],
+            "stil_etiketi": prediction["predicted_style"],
+            "guven_skoru": prediction["confidence"],
+            "detaylar": prediction["all_confidences"],
         }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Image analysis error: {str(e)}")
 
-    result = fashion_classifier.classify_image(
-        image_path=image_path,
-        image_b64=image_b64,
-    )
 
-    if not result.get("success"):
-        return {
-            "success": False,
-            "message": result.get("error", "Sınıflandırma başarısız."),
-            "data": None,
-        }
-
-    return {
-        "success": True,
-        "message": "Kıyafet analizi tamamlandı.",
-        "data": {
-            "tur": result["tur"],
-            "renk": result["renk"],
-            "stil_etiketi": result["stil_etiketi"],
-            "mevsim": result["mevsim"],
-            "post_category": result["post_category"],
-            "confidence": result["confidence"],
-            "alternatifler": result.get("alternatifler", []),
-        },
-    }
-
-@router.delete("/outfits/{oneri_id}")
-def kombin_sil(oneri_id: int, db: sqlite3.Connection = Depends(get_db)):
-    """Bir kombini siler."""
+@router.delete("/outfits/{outfit_id}")
+def delete_outfit(outfit_id: int, db: sqlite3.Connection = Depends(get_db)):
+    """Deletes an outfit recommendation."""
     repo = ItemRepository(db)
-    if repo.kombin_sil(oneri_id):
-        return {"mesaj": "Kombin silindi", "id": oneri_id}
-    else:
-        raise HTTPException(status_code=404, detail="Kombin bulunamadi.")
+    try:
+        deleted = repo.delete_outfit(outfit_id)
+        if not deleted:
+            raise HTTPException(status_code=404, detail="Outfit not found.")
+        return {"mesaj": "Outfit deleted", "message": "Outfit deleted", "id": outfit_id}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Error deleting outfit: {str(e)}")
 
 
+# Backwards compatibility function aliases
+kiyafet_ekle = add_cloth
+kiyafetleri_listele = list_clothes
+kiyafet_guncelle = update_cloth
+kiyafet_sil = delete_cloth
+kombin_oner = recommend_outfit
+outfits_listele = list_outfits
+manuel_kombin_olustur = create_manual_outfit
+kiyafet_gorseli_analiz_et = analyze_cloth_image
+kombin_sil = delete_outfit

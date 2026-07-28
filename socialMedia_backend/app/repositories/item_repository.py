@@ -3,12 +3,12 @@ from typing import Optional
 import sqlite3
 import json
 
-KATEGORI_TIPLERI = [
+CATEGORY_TYPES = [
     "tur", "kumas", "kesim", "yaka_tipi", "kol_tipi",
     "desen", "mevsim", "stil_etiketi", "kullanim_sikligi",
 ]
 
-KIYAFET_ALANLARI = [
+CLOTH_FIELDS = [
     "tur", "renk", "renk_hex", "renk_kategori_id", "marka", "beden", "kumas", "kesim", "yaka_tipi",
     "kol_tipi", "desen", "mevsim", "stil_etiketi", "kullanim_sikligi",
     "kombin_notu", "temiz", "foto_url", "is_favorite",
@@ -18,54 +18,54 @@ class ItemRepository:
     def __init__(self, db: sqlite3.Connection):
         self.db = db
 
-    # ---------- Kategoriler ----------
-    def kategorileri_getir(self) -> dict[str, list[str]]:
+    # ---------- Categories ----------
+    def get_categories(self) -> dict[str, list[str]]:
         rows = self.db.execute("SELECT tip, deger FROM kategoriler ORDER BY tip, deger").fetchall()
-        sonuc: dict[str, list[str]] = {tip: [] for tip in KATEGORI_TIPLERI}
+        result: dict[str, list[str]] = {t: [] for t in CATEGORY_TYPES}
         for row in rows:
-            sonuc.setdefault(row["tip"], []).append(row["deger"])
-        return sonuc
+            result.setdefault(row["tip"], []).append(row["deger"])
+        return result
 
-    def kategori_ekle(self, tip: str, deger: str) -> int:
+    def add_category(self, category_type: str, value: str) -> int:
         cur = self.db.execute(
             "INSERT OR IGNORE INTO kategoriler (tip, deger) VALUES (?, ?)",
-            (tip, deger.strip()),
+            (category_type, value.strip()),
         )
         self.db.commit()
         return cur.lastrowid
 
-    def kategori_sil(self, kategori_id: int):
-        self.db.execute("DELETE FROM kategoriler WHERE id = ?", (kategori_id,))
+    def delete_category(self, category_id: int):
+        self.db.execute("DELETE FROM kategoriler WHERE id = ?", (category_id,))
         self.db.commit()
 
-    def kategori_deger_ile_sil(self, tip: str, deger: str):
-        self.db.execute("DELETE FROM kategoriler WHERE tip = ? AND deger = ?", (tip, deger))
+    def delete_category_by_value(self, category_type: str, value: str):
+        self.db.execute("DELETE FROM kategoriler WHERE tip = ? AND deger = ?", (category_type, value))
         self.db.commit()
 
-    # ---------- Kıyafetler ----------
-    def kiyafet_ekle(self, user_id: str, **alanlar) -> int:
-        kolonlar = [k for k in alanlar if k in KIYAFET_ALANLARI]
-        degerler = [alanlar[k] for k in kolonlar]
+    # ---------- Clothes / Items ----------
+    def add_cloth(self, user_id: str, **fields) -> int:
+        columns = [k for k in fields if k in CLOTH_FIELDS]
+        values = [fields[k] for k in columns]
 
-        if "temiz" in kolonlar:
-            idx = kolonlar.index("temiz")
-            degerler[idx] = int(bool(degerler[idx]))
-        if "is_favorite" in kolonlar:
-            idx = kolonlar.index("is_favorite")
-            degerler[idx] = int(bool(degerler[idx]))
+        if "temiz" in columns:
+            idx = columns.index("temiz")
+            values[idx] = int(bool(values[idx]))
+        if "is_favorite" in columns:
+            idx = columns.index("is_favorite")
+            values[idx] = int(bool(values[idx]))
 
-        kolon_str = ", ".join(["user_id"] + kolonlar)
-        soru_isaretleri = ", ".join(["?"] * (len(kolonlar) + 1))
+        column_str = ", ".join(["user_id"] + columns)
+        placeholders = ", ".join(["?"] * (len(columns) + 1))
         
         cur = self.db.execute(
-            f"INSERT INTO kiyafetler ({kolon_str}) VALUES ({soru_isaretleri})",
-            [user_id] + degerler,
+            f"INSERT INTO kiyafetler ({column_str}) VALUES ({placeholders})",
+            [user_id] + values,
         )
         self.db.commit()
         return cur.lastrowid
 
-    def kiyafetleri_getir(self, user_id: str, sadece_temiz: bool = False) -> list[dict]:
-        if sadece_temiz:
+    def get_clothes(self, user_id: str, clean_only: bool = False) -> list[dict]:
+        if clean_only:
             rows = self.db.execute(
                 "SELECT * FROM kiyafetler WHERE user_id = ? AND temiz = 1 ORDER BY id DESC",
                 (user_id,)
@@ -77,116 +77,129 @@ class ItemRepository:
             ).fetchall()
         return [dict(row) for row in rows]
 
-    def kiyafet_getir(self, kiyafet_id: int) -> Optional[dict]:
-        row = self.db.execute("SELECT * FROM kiyafetler WHERE id = ?", (kiyafet_id,)).fetchone()
+    def get_cloth(self, item_id: int) -> Optional[dict]:
+        row = self.db.execute("SELECT * FROM kiyafetler WHERE id = ?", (item_id,)).fetchone()
         return dict(row) if row else None
 
-    def kiyafet_guncelle(self, kiyafet_id: int, **alanlar) -> bool:
-        kolonlar = [k for k in alanlar if k in KIYAFET_ALANLARI]
-        if not kolonlar:
+    def update_cloth(self, item_id: int, **fields) -> bool:
+        columns = [k for k in fields if k in CLOTH_FIELDS]
+        if not columns:
             return False
 
-        degerler = [alanlar[k] for k in kolonlar]
-        if "temiz" in kolonlar:
-            idx = kolonlar.index("temiz")
-            degerler[idx] = int(bool(degerler[idx]))
-        if "is_favorite" in kolonlar:
-            idx = kolonlar.index("is_favorite")
-            degerler[idx] = int(bool(degerler[idx]))
+        values = [fields[k] for k in columns]
+        if "temiz" in columns:
+            idx = columns.index("temiz")
+            values[idx] = int(bool(values[idx]))
+        if "is_favorite" in columns:
+            idx = columns.index("is_favorite")
+            values[idx] = int(bool(values[idx]))
 
-        set_ifadesi = ", ".join([f"{k} = ?" for k in kolonlar])
+        set_clause = ", ".join([f"{k} = ?" for k in columns])
         cur = self.db.execute(
-            f"UPDATE kiyafetler SET {set_ifadesi} WHERE id = ?",
-            degerler + [kiyafet_id],
+            f"UPDATE kiyafetler SET {set_clause} WHERE id = ?",
+            values + [item_id],
         )
         self.db.commit()
         return cur.rowcount > 0
 
-    def kiyafet_durumunu_guncelle(self, kiyafet_id: int, temiz: bool):
-        self.kiyafet_guncelle(kiyafet_id, temiz=temiz)
+    def update_cloth_status(self, item_id: int, clean: bool):
+        self.update_cloth(item_id, temiz=clean)
 
-    def kiyafet_sil(self, kiyafet_id: int) -> bool:
-        cur = self.db.execute("DELETE FROM kiyafetler WHERE id = ?", (kiyafet_id,))
+    def delete_cloth(self, item_id: int) -> bool:
+        cur = self.db.execute("DELETE FROM kiyafetler WHERE id = ?", (item_id,))
         self.db.commit()
         return cur.rowcount > 0
 
-    # ---------- Sohbet ve Kombin ----------
-    def mesaj_kaydet(self, user_id: str, rol: str, mesaj: str):
+    # ---------- Chat & Outfits ----------
+    def save_chat_message(self, user_id: str, role: str, message: str):
         self.db.execute(
             "INSERT INTO sohbet_gecmisi (user_id, rol, icerik) VALUES (?, ?, ?)",
-            (user_id, rol, mesaj),
+            (user_id, role, message),
         )
         self.db.commit()
 
-    def sohbet_gecmisini_getir(self, user_id: str, limit: int = 20) -> list[dict]:
+    def get_chat_history(self, user_id: str, limit: int = 20) -> list[dict]:
         rows = self.db.execute(
             "SELECT rol, icerik AS mesaj FROM sohbet_gecmisi WHERE user_id = ? ORDER BY id DESC LIMIT ?",
             (user_id, limit),
         ).fetchall()
         return [dict(row) for row in reversed(rows)]
 
-    def kombin_onerisi_kaydet(self, user_id: str, baglam_json: str, kiyafet_idleri: list[int], aciklama: str) -> int:
-        import json as _json
+    def save_outfit_recommendation(self, user_id: str, context_json: str, item_ids: list[int], description: str) -> int:
         cur = self.db.execute(
             "INSERT INTO kombin_onerileri (user_id, baglam_json, kiyafet_idleri, aciklama) VALUES (?, ?, ?, ?)",
-            (user_id, baglam_json, _json.dumps(kiyafet_idleri), aciklama),
+            (user_id, context_json, json.dumps(item_ids), description),
         )
         self.db.commit()
         return cur.lastrowid
 
-    def kombin_geri_bildirim_kaydet(self, oneri_id: int, begenildi: bool):
+    def save_outfit_feedback(self, recommendation_id: int, liked: bool):
         self.db.execute(
             "UPDATE kombin_onerileri SET begenildi = ? WHERE id = ?",
-            (int(begenildi), oneri_id),
+            (int(liked), recommendation_id),
         )
         self.db.commit()
 
-    def kombin_onerilerini_getir(self, user_id: str) -> list[dict]:
+    def get_outfit_recommendations(self, user_id: str) -> list[dict]:
         rows = self.db.execute(
             "SELECT * FROM kombin_onerileri WHERE user_id = ? ORDER BY id DESC",
             (user_id,)
         ).fetchall()
         
-        sonuc = []
+        result = []
         for row in rows:
-            kombin = dict(row)
+            outfit = dict(row)
             try:
-                import json as _json
-                # kiyafet_idleri'ni çözümle ve kıyafetleri getir
-                kiyafet_idleri = _json.loads(kombin["kiyafet_idleri"])
-                
-                kiyafetler = []
-                for k_id in kiyafet_idleri:
-                    k = self.kiyafet_getir(k_id)
+                item_ids = json.loads(outfit["kiyafet_idleri"])
+                clothes = []
+                for k_id in item_ids:
+                    k = self.get_cloth(k_id)
                     if k:
-                        kiyafetler.append(k)
-                        
-                kombin["kiyafetler"] = kiyafetler
-                sonuc.append(kombin)
-            except:
+                        clothes.append(k)
+                outfit["kiyafetler"] = clothes
+                result.append(outfit)
+            except Exception:
                 pass
-        return sonuc
+        return result
 
-    def kombin_onerisini_getir(self, oneri_id: int) -> Optional[dict]:
-        row = self.db.execute("SELECT * FROM kombin_onerileri WHERE id = ?", (oneri_id,)).fetchone()
+    def get_outfit_recommendation(self, recommendation_id: int) -> Optional[dict]:
+        row = self.db.execute("SELECT * FROM kombin_onerileri WHERE id = ?", (recommendation_id,)).fetchone()
         if not row:
             return None
             
-        kombin = dict(row)
+        outfit = dict(row)
         try:
-            import json as _json
-            kiyafet_idleri = _json.loads(kombin["kiyafet_idleri"])
-            kiyafetler = []
-            for k_id in kiyafet_idleri:
-                k = self.kiyafet_getir(k_id)
+            item_ids = json.loads(outfit["kiyafet_idleri"])
+            clothes = []
+            for k_id in item_ids:
+                k = self.get_cloth(k_id)
                 if k:
-                    kiyafetler.append(k)
-            kombin["kiyafetler"] = kiyafetler
-        except:
-            kombin["kiyafetler"] = []
-        return kombin
+                    clothes.append(k)
+            outfit["kiyafetler"] = clothes
+        except Exception:
+            outfit["kiyafetler"] = []
+        return outfit
 
-    def kombin_sil(self, oneri_id: int) -> bool:
-        cur = self.db.execute("DELETE FROM kombin_onerileri WHERE id = ?", (oneri_id,))
+    def delete_outfit(self, recommendation_id: int) -> bool:
+        cur = self.db.execute("DELETE FROM kombin_onerileri WHERE id = ?", (recommendation_id,))
         self.db.commit()
         return cur.rowcount > 0
+
+    # Backwards compatibility aliases
+    kategorileri_getir = get_categories
+    kategori_ekle = add_category
+    kategori_sil = delete_category
+    kategori_deger_ile_sil = delete_category_by_value
+    kiyafet_ekle = add_cloth
+    kiyafetleri_getir = get_clothes
+    kiyafet_getir = get_cloth
+    kiyafet_guncelle = update_cloth
+    kiyafet_durumunu_guncelle = update_cloth_status
+    kiyafet_sil = delete_cloth
+    mesaj_kaydet = save_chat_message
+    sohbet_gecmisini_getir = get_chat_history
+    kombin_onerisi_kaydet = save_outfit_recommendation
+    kombin_geri_bildirim_kaydet = save_outfit_feedback
+    kombin_onerilerini_getir = get_outfit_recommendations
+    kombin_onerisini_getir = get_outfit_recommendation
+    kombin_sil = delete_outfit

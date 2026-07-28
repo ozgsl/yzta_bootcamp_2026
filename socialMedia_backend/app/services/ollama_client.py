@@ -1,13 +1,12 @@
 """
-ollama_client.py (eski adı: gemini_client.py)
----------------------------------------------
-Yerel Ollama LLM ile konuşan servis katmanı.
-Gemini API yerine http://localhost:11434 üzerinde çalışan
-yerel llama3.2 modeli kullanılır.
+ollama_client.py
+----------------
+Service layer interacting with local Ollama LLM.
+Uses local llama3.2 model running on http://localhost:11434.
 
-İki ana fonksiyon:
-1. sohbet_yaniti_al()    -> Chatbot mesajına yanıt üretir + bağlam JSON çıkarır
-2. kombin_onerisi_uret() -> Bağlam + temiz kıyafet listesine göre kombin önerir
+Primary functions:
+1. get_chat_response() -> Generates chatbot response and extracts context JSON
+2. generate_outfit_recommendation() -> Recommends an outfit based on context and clean clothes list
 """
 
 from __future__ import annotations
@@ -18,11 +17,11 @@ import httpx
 from typing import List, Dict
 
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
-OLLAMA_MODEL    = os.getenv("OLLAMA_MODEL", "llama3.2")
+OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "llama3.2")
 
 
 def _ollama_chat(messages: List[Dict], temperature: float = 0.7) -> str:
-    """Ollama /api/chat endpoint'ini çağırır, string yanıt döner."""
+    """Calls Ollama /api/chat endpoint and returns string response."""
     payload = {
         "model": OLLAMA_MODEL,
         "messages": messages,
@@ -40,39 +39,37 @@ def _ollama_chat(messages: List[Dict], temperature: float = 0.7) -> str:
 
 
 def _extract_json(text: str) -> dict:
-    """Model çıktısından JSON bloğunu ayıklar."""
-    # ```json ... ``` bloğu varsa içini al
+    """Extracts JSON block from model output."""
     match = re.search(r"```(?:json)?\s*([\s\S]+?)```", text)
     if match:
         text = match.group(1)
-    # Ham JSON bul
     start = text.find("{")
-    end   = text.rfind("}") + 1
+    end = text.rfind("}") + 1
     if start != -1 and end > start:
         try:
             return json.loads(text[start:end])
         except json.JSONDecodeError:
             pass
-    raise ValueError(f"Geçerli JSON bulunamadı:\n{text[:300]}")
+    raise ValueError(f"No valid JSON found:\n{text[:300]}")
 
 
 # ─────────────────────────────────────────────
 # 1) CHATBOT
 # ─────────────────────────────────────────────
 
-CHATBOT_SISTEM_PROMPTU = """\
-Sen "Akıllı Dolap" uygulamasının moda asistanısın. Görevin kullanıcıyla
-kısa ve doğal sohbet ederek şunları öğrenmek:
-- Nereye gidiyor / ne yapacak (etkinlik: iş, randevu, spor, gezi, parti vb.)
-- Hava durumu (bilmiyorsa nazikçe sor)
-- Varsa stil tercihi (rahat, şık, spor vb.)
+CHATBOT_SYSTEM_PROMPT = """\
+You are the AI Stylist Assistant for the digital wardrobe app.
+Your task is to have a short, warm, and natural conversation with the user to learn:
+- Where they are going / what they are doing (event: work, date, sports, travel, party, etc.)
+- Current weather (ask politely if unknown)
+- Style preference (casual, chic, sporty, etc.)
 
-Kurallar:
-- Sıcak, samimi ve kısa cümlelerle yaz. Tek seferde tek soru sor.
-- Yeterli bilgi (en az etkinlik + hava) toplayana kadar sohbete devam et.
-- Hazır olunca "harika, hazırlanıyorum" gibi bir kapanış yap, hazir_mi = true yap.
+Rules:
+- Write short, friendly sentences. Ask one question at a time.
+- Continue conversation until you gather sufficient info (at least event + weather).
+- When ready, make a polite closing (e.g. "Great, preparing your outfit now!"), set is_ready = true.
 
-YANITI MUTLAKA aşağıdaki JSON formatında ver, başka hiçbir şey yazma:
+ALWAYS output response in the following JSON format:
 {
   "asistan_mesaji": "...",
   "baglam": {"etkinlik": "...", "hava_durumu": "...", "stil_tercihi": "..."},
@@ -80,120 +77,109 @@ YANITI MUTLAKA aşağıdaki JSON formatında ver, başka hiçbir şey yazma:
 }"""
 
 
-def sohbet_yaniti_al(gecmis: List[Dict], yeni_mesaj: str) -> dict:
+def get_chat_response(history: List[Dict], new_message: str) -> dict:
     """
-    gecmis: [{"rol": "user"/"assistant", "mesaj": "..."}]
-    yeni_mesaj: kullanıcının yeni mesajı
+    history: [{"rol": "user"/"assistant", "mesaj": "..."}]
+    new_message: User's new chat message
 
-    Dönen:
+    Returns:
     {"asistan_mesaji": "...", "baglam": {...}, "hazir_mi": bool}
     """
-    messages = [{"role": "system", "content": CHATBOT_SISTEM_PROMPTU}]
-    for m in gecmis:
-        role = "user" if m["rol"] == "user" else "assistant"
-        messages.append({"role": role, "content": m["mesaj"]})
-    messages.append({"role": "user", "content": yeni_mesaj})
+    messages = [{"role": "system", "content": CHATBOT_SYSTEM_PROMPT}]
+    for m in history:
+        role = "user" if m.get("rol") == "user" or m.get("role") == "user" else "assistant"
+        content = m.get("mesaj") or m.get("content") or ""
+        messages.append({"role": role, "content": content})
+    messages.append({"role": "user", "content": new_message})
 
     raw = _ollama_chat(messages, temperature=0.7)
     if not raw:
-        # Ollama kapalıysa akıllı fallback
+        # Smart fallback when Ollama server is offline
         return {
-            "asistan_mesaji": f"Harika! {yeni_mesaj} için şık bir kombin hazırlıyorum ✨",
-            "baglam": {"etkinlik": yeni_mesaj, "hava_durumu": "güneşli", "stil_tercihi": "gündelik"},
+            "asistan_mesaji": "Harika! Gardırobundaki en uygun kıyafetleri inceleyip sana özel kombinini hazırlıyorum ✨",
+            "baglam": {
+                "etkinlik": "Günlük",
+                "hava_durumu": "Güzel",
+                "stil_tercihi": "Rahat",
+            },
             "hazir_mi": True,
         }
 
     try:
-        result = _extract_json(raw)
+        return _extract_json(raw)
     except ValueError:
-        # JSON parse edilemezse güvenli fallback
-        result = {
-            "asistan_mesaji": raw.strip()[:500] or "Anladım, kombininizi hazırlıyorum!",
-            "baglam": {"etkinlik": yeni_mesaj, "hava_durumu": "", "stil_tercihi": ""},
-            "hazir_mi": True,
+        return {
+            "asistan_mesaji": raw,
+            "baglam": {},
+            "hazir_mi": False,
         }
 
-    # Zorunlu anahtarların varlığını garanti et
-    result.setdefault("asistan_mesaji", "")
-    result.setdefault("baglam", {})
-    result.setdefault("hazir_mi", False)
-    result["baglam"].setdefault("etkinlik", "")
-    result["baglam"].setdefault("hava_durumu", "")
-    result["baglam"].setdefault("stil_tercihi", "")
-    return result
-
 
 # ─────────────────────────────────────────────
-# 2) KOMBİN ÖNERİSİ
+# 2) OUTFIT RECOMMENDATION GENERATOR
 # ─────────────────────────────────────────────
 
-KOMBIN_SISTEM_PROMPTU = """\
-Sen bir moda stilistisin. Sana bir bağlam (etkinlik, hava durumu, stil tercihi)
-ve kullanıcının dolabındaki TEMİZ kıyafetlerin listesi verilecek.
-
-Görevin: Bu kıyafetler arasından verilen bağlama en uygun KOMBİNİ seçmek.
-Sadece verilen kıyafet ID'lerini kullan; var olmayan kıyafet icat etme.
-
-YANITI MUTLAKA aşağıdaki JSON formatında ver, başka hiçbir şey yazma:
-{
-  "secilen_kiyafet_idleri": [1, 2, 3],
-  "aciklama": "Kombinin neden uygun olduğuna dair kısa açıklama"
-}"""
-
-
-def kombin_onerisi_uret(baglam: dict, temiz_kiyafetler: List[Dict]) -> dict:
-    """
-    baglam: {"etkinlik": "...", "hava_durumu": "...", "stil_tercihi": "..."}
-    temiz_kiyafetler: kiyafetleri_getir(sadece_temiz=True) çıktısı
-
-    Dönen:
-    {"secilen_kiyafet_idleri": [...], "aciklama": "..."}
-    """
-    if not temiz_kiyafetler:
-        return {"secilen_kiyafet_idleri": [], "aciklama": "Dolabında hiç temiz kıyafet bulunamadı."}
-
-    kiyafet_listesi = json.dumps(temiz_kiyafetler, ensure_ascii=False, indent=2)
-    kullanici_mesaji = f"""
-BAĞLAM:
-{json.dumps(baglam, ensure_ascii=False, indent=2)}
-
-KULLANICININ TEMİZ KIYAFETLERİ:
-{kiyafet_listesi}
-
-Lütfen bu bağlama en uygun kombini yalnızca yukarıdaki kıyafet ID'lerini kullanarak öner.
+RECOMMENDER_SYSTEM_PROMPT = """\
+You are an expert AI fashion stylist. Select 2-4 items from the available wardrobe list for the given context.
+Rules:
+- Select from clean items provided in the list.
+- Return output strictly in JSON format.
 """
-    messages = [
-        {"role": "system", "content": KOMBIN_SISTEM_PROMPTU},
-        {"role": "user",   "content": kullanici_mesaji},
+
+
+def generate_outfit_recommendation(context: dict, clean_clothes: List[Dict]) -> dict:
+    """
+    context: {"etkinlik": "...", "hava_durumu": "...", "stil_tercihi": "..."}
+    clean_clothes: List of clean clothes dicts
+
+    Returns:
+    {"secilen_kiyafet_idleri": [int, ...], "aciklama": "..."}
+    """
+    if not clean_clothes:
+        return {"secilen_kiyafet_idleri": [], "aciklama": "Dolabında temiz kıyafet bulunamadı."}
+
+    # Rule-based matching fallback
+    selected_ids = []
+    top = next((c for c in clean_clothes if c.get("tur", "").lower() in ["tişört", "t-shirt", "gömlek", "bluz", "kazak", "sweatshirt", "üst giyim"]), None)
+    bottom = next((c for c in clean_clothes if c.get("tur", "").lower() in ["pantolon", "şort", "etek", "alt giyim", "jean"]), None)
+    shoes = next((c for c in clean_clothes if c.get("tur", "").lower() in ["ayakkabı", "sneaker", "bot"]), None)
+    accessory = next((c for c in clean_clothes if c.get("tur", "").lower() in ["çanta", "aksesuar", "ceket", "mont"]), None)
+
+    if top:
+        selected_ids.append(top["id"])
+    if bottom:
+        selected_ids.append(bottom["id"])
+    if shoes:
+        selected_ids.append(shoes["id"])
+    if accessory and len(selected_ids) < 4:
+        selected_ids.append(accessory["id"])
+
+    if not selected_ids:
+        selected_ids = [c["id"] for c in clean_clothes[:3]]
+
+    event = context.get("etkinlik", "günlük kullanım")
+    weather = context.get("hava_durumu", "normal hava")
+
+    prompt_messages = [
+        {"role": "system", "content": RECOMMENDER_SYSTEM_PROMPT},
+        {"role": "user", "content": f"Context: {json.dumps(context, ensure_ascii=False)}\nClothes: {json.dumps(clean_clothes, ensure_ascii=False)}"},
     ]
-    raw = _ollama_chat(messages, temperature=0.8)
-    
-    if not raw:
-        # Akıllı kural tabanlı kombin eşleştirme (Ollama kapalı durumlar için)
-        ustler = [k for k in temiz_kiyafetler if any(t in str(k.get("tur", "")).lower() for t in ["tişört", "gömlek", "bluz", "kazak", "hırka", "sweatshirt", "hoodie", "ceket", "üst"])]
-        altlar = [k for k in temiz_kiyafetler if any(t in str(k.get("tur", "")).lower() for t in ["pantolon", "jean", "kot", "şort", "tayt", "eşofman", "etek", "alt"])]
-        digerleri = [k for k in temiz_kiyafetler if k not in ustler and k not in altlar]
 
-        secilen = []
-        if ustler: secilen.append(ustler[0]["id"])
-        if altlar: secilen.append(altlar[0]["id"])
-        if digerleri: secilen.append(digerleri[0]["id"])
-        if not secilen: secilen = [k["id"] for k in temiz_kiyafetler[:3]]
+    raw = _ollama_chat(prompt_messages, temperature=0.3)
+    if raw:
+        try:
+            res = _extract_json(raw)
+            if res.get("secilen_kiyafet_idleri"):
+                return res
+        except Exception:
+            pass
 
-        etkinlik = baglam.get("etkinlik", "günlük kullanım")
-        return {
-            "secilen_kiyafet_idleri": secilen,
-            "aciklama": f"'{etkinlik}' etkinliği için dolabındaki en uyumlu parçalardan özel bir kombin oluşturuldu ✨"
-        }
+    return {
+        "secilen_kiyafet_idleri": selected_ids,
+        "aciklama": f"{event.capitalize()} ve {weather} şartları için gardırobundan özenle seçilen şık kombin önerisi ✨",
+    }
 
-    try:
-        result = _extract_json(raw)
-    except ValueError:
-        result = {
-            "secilen_kiyafet_idleri": [k["id"] for k in temiz_kiyafetler[:3]],
-            "aciklama": raw.strip()[:300] or "Kombin önerisi oluşturuldu.",
-        }
 
-    result.setdefault("secilen_kiyafet_idleri", [])
-    result.setdefault("aciklama", "")
-    return result
+# Backwards compatibility aliases
+sohbet_yaniti_al = get_chat_response
+kombin_onerisi_uret = generate_outfit_recommendation
