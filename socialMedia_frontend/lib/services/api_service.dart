@@ -24,7 +24,7 @@ class ApiService {
     // Bilinen tüm local adres varyantlarını AppConfig.baseUrl ile değiştir
     return url.replaceAllMapped(
       RegExp(
-          r'https?://(localhost|127\.0\.0\.1|10\.0\.2\.2|10\.5\.5\.\d+):8000'),
+          r'https?://(localhost|127\.0\.0\.1|10\.0\.2\.2|10\.5\.5\.\d+|192\.168\.\d+\.\d+):8000'),
       (_) => AppConfig.baseUrl,
     );
   }
