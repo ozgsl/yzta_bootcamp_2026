@@ -300,7 +300,7 @@ class _EditItemScreenState extends ConsumerState<EditItemScreen> {
 
     return PopScope(
       canPop: false,
-      onPopInvoked: (didPop) {
+      onPopInvokedWithResult: (didPop, _) {
         if (!didPop) Navigator.pop(context, true);
       },
       child: Scaffold(
