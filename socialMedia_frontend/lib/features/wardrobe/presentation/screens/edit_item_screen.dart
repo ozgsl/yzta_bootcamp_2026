@@ -9,6 +9,8 @@ import '../../../../core/theme/app_theme.dart';
 import '../../../../features/auth/presentation/providers/auth_provider.dart';
 import '../../../../services/api_service.dart';
 import '../../../../core/localization/locale_provider.dart';
+import '../../domain/models/color_model.dart';
+import '../widgets/clothing_color_picker.dart';
 
 class EditItemScreen extends ConsumerStatefulWidget {
   final Map<String, dynamic> initialItem;
@@ -24,9 +26,11 @@ class _EditItemScreenState extends ConsumerState<EditItemScreen> {
   File? _selectedImage;
   bool _isLoading = false;
   bool _isDeleting = false;
+  bool _isFavorite = false;
+  bool _isDirty = false;
 
   late String _tur;
-  late String _renk;
+  SelectedColor? _selectedColor;
   late String _mevsim;
 
   final _markaCtrl = TextEditingController();
@@ -41,17 +45,6 @@ class _EditItemScreenState extends ConsumerState<EditItemScreen> {
     'Aksesuar',
     'Çanta'
   ];
-  final List<String> _renkler = [
-    'Siyah',
-    'Beyaz',
-    'Kırmızı',
-    'Mavi',
-    'Yeşil',
-    'Sarı',
-    'Gri',
-    'Kahverengi',
-    'Çok Renkli'
-  ];
   final List<String> _mevsimler = [
     'İlkbahar',
     'Yaz',
@@ -64,12 +57,26 @@ class _EditItemScreenState extends ConsumerState<EditItemScreen> {
   void initState() {
     super.initState();
     _tur = _ensureValidDropdownValue(widget.initialItem['tur'], _turler);
-    _renk = _ensureValidDropdownValue(widget.initialItem['renk'], _renkler);
+    
+    final renk = widget.initialItem['renk'] as String?;
+    final renkHex = widget.initialItem['renk_hex'] as String?;
+    final renkCatId = widget.initialItem['renk_kategori_id'] as String?;
+    if (renk != null) {
+      _selectedColor = SelectedColor(
+        name: renk,
+        hexCode: renkHex ?? '#000000',
+        parentCategoryId: renkCatId ?? 'siyah',
+      );
+    }
+
     _mevsim =
         _ensureValidDropdownValue(widget.initialItem['mevsim'], _mevsimler);
 
     _markaCtrl.text = widget.initialItem['marka'] ?? '';
     _bedenCtrl.text = widget.initialItem['beden'] ?? '';
+
+    _isFavorite = widget.initialItem['is_favorite'] == 1 || widget.initialItem['is_favorite'] == true;
+    _isDirty = widget.initialItem['is_dirty'] == 1 || widget.initialItem['is_dirty'] == true;
   }
 
   String _ensureValidDropdownValue(dynamic val, List<String> items) {
@@ -111,11 +118,15 @@ class _EditItemScreenState extends ConsumerState<EditItemScreen> {
 
       await ApiService().updateCloth(widget.initialItem['id'], {
         'tur': _tur,
-        'renk': _renk,
+        'renk': _selectedColor?.name ?? 'Belirsiz',
+        'renk_hex': _selectedColor?.hexCode,
+        'renk_kategori_id': _selectedColor?.parentCategoryId,
         'marka': _markaCtrl.text.isEmpty ? null : _markaCtrl.text,
         'beden': _bedenCtrl.text.isEmpty ? null : _bedenCtrl.text,
         'mevsim': _mevsim,
         'foto_url': imageUrl,
+        'is_favorite': _isFavorite,
+        'is_dirty': _isDirty,
       });
 
       if (mounted) {
@@ -242,20 +253,17 @@ class _EditItemScreenState extends ConsumerState<EditItemScreen> {
             color:
                 Theme.of(context).textTheme.bodyLarge?.color ?? Colors.white),
         actions: [
-          _isDeleting
-              ? Padding(
-                  padding: EdgeInsets.all(16),
-                  child: SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: CircularProgressIndicator(
-                          color: Theme.of(context).colorScheme.error,
-                          strokeWidth: 2)))
-              : IconButton(
-                  icon: Icon(Icons.delete_outline,
-                      color: Theme.of(context).colorScheme.error),
-                  onPressed: _deleteItem,
-                ),
+          IconButton(
+            icon: Icon(
+              _isFavorite ? Icons.favorite_rounded : Icons.favorite_border_rounded,
+              color: _isFavorite ? Colors.redAccent : (Theme.of(context).textTheme.bodyLarge?.color ?? Colors.white),
+            ),
+            onPressed: () {
+              setState(() {
+                _isFavorite = !_isFavorite;
+              });
+            },
+          ),
           _isLoading
               ? Padding(
                   padding: EdgeInsets.all(16),
@@ -330,11 +338,12 @@ class _EditItemScreenState extends ConsumerState<EditItemScreen> {
                 displayTranslator: (val) => s.translateWardrobe(val)),
             const SizedBox(height: 16),
             const _SectionLabel(text: 'Color *'),
-            _ChipsField(
-                value: _renk,
-                items: _renkler,
-                onChanged: (v) => setState(() => _renk = v),
-                displayTranslator: (val) => s.translateWardrobe(val)),
+            ClothingColorPicker(
+              initialColor: _selectedColor,
+              onColorSelected: (color) {
+                setState(() => _selectedColor = color);
+              },
+            ),
             const SizedBox(height: 16),
             const _SectionLabel(text: 'Season'),
             _ChipsField(
@@ -359,6 +368,65 @@ class _EditItemScreenState extends ConsumerState<EditItemScreen> {
                   color: Theme.of(context).textTheme.bodyLarge?.color ??
                       Colors.white),
               decoration: _inputDeco('Size (e.g. M, 38)'),
+            ),
+            const SizedBox(height: 32),
+            
+            // Laundry Basket / Clean Toggle
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              decoration: BoxDecoration(
+                color: Theme.of(context).cardColor,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: SwitchListTile(
+                title: Text(
+                  _isDirty ? 'Kirli Sepetinde' : 'Dolapta (Temiz)',
+                  style: TextStyle(
+                    color: Theme.of(context).textTheme.bodyLarge?.color ?? Colors.white,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                subtitle: Text(
+                  'Bu kıyafet kirli sepetinde mi?',
+                  style: TextStyle(
+                    color: Theme.of(context).textTheme.bodySmall?.color ?? Colors.grey,
+                  ),
+                ),
+                value: _isDirty,
+                activeColor: Theme.of(context).colorScheme.primary,
+                secondary: Icon(
+                  _isDirty ? Icons.local_laundry_service_rounded : Icons.checkroom_rounded,
+                  color: _isDirty ? Colors.orangeAccent : Colors.green,
+                ),
+                onChanged: (val) {
+                  setState(() {
+                    _isDirty = val;
+                  });
+                },
+              ),
+            ),
+
+            const SizedBox(height: 32),
+            
+            // Delete Button
+            SizedBox(
+              width: double.infinity,
+              height: 50,
+              child: OutlinedButton.icon(
+                onPressed: _isDeleting ? null : _deleteItem,
+                icon: _isDeleting 
+                    ? SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Theme.of(context).colorScheme.error, strokeWidth: 2)) 
+                    : Icon(Icons.delete_outline_rounded, color: Theme.of(context).colorScheme.error),
+                label: Text(
+                  'Kıyafeti Sil',
+                  style: TextStyle(color: Theme.of(context).colorScheme.error, fontWeight: FontWeight.bold),
+                ),
+                style: OutlinedButton.styleFrom(
+                  side: BorderSide(color: Theme.of(context).colorScheme.error),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+              ),
             ),
             const SizedBox(height: 40),
           ],

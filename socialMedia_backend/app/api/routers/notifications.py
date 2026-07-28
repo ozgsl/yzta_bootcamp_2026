@@ -38,6 +38,7 @@ def create_notification(
     )
 
 
+@router.get("/")
 @router.get("")
 def get_notifications(
     user_id: str = Query(...),

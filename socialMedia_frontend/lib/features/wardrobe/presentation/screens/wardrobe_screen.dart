@@ -31,11 +31,15 @@ class _WardrobeScreenState extends ConsumerState<WardrobeScreen> {
   void _loadClothes() {
     final userId = ref.read(authProvider).currentUserId ?? '';
     setState(() {
-      _clothesFuture = _apiService.getClothes(userId).then((clothes) {
-        // Temiz kıyafet sayısını kontrol et, az kalırsa bildirim gönder
-        NotificationService().checkLowClothesCount(clothes);
-        return clothes;
-      });
+      if (userId.isEmpty) {
+        _clothesFuture = Future.value([]);
+      } else {
+        _clothesFuture = _apiService.getClothes(userId).then((clothes) {
+          // Temiz kıyafet sayısını kontrol et, az kalırsa bildirim gönder
+          NotificationService().checkLowClothesCount(clothes);
+          return clothes;
+        });
+      }
     });
   }
 
@@ -154,6 +158,12 @@ class _WardrobeScreenState extends ConsumerState<WardrobeScreen> {
                         _selectedCategory == 'Favorites' ? null : 'Favorites'),
                   ),
                   _FilterChip(
+                    label: 'Kirli Sepeti',
+                    isSelected: _selectedCategory == 'Kirli Sepeti',
+                    onTap: () => setState(() => _selectedCategory =
+                        _selectedCategory == 'Kirli Sepeti' ? null : 'Kirli Sepeti'),
+                  ),
+                  _FilterChip(
                     label: 'Shirt',
                     isSelected: _selectedCategory == 'Shirt',
                     onTap: () => setState(() => _selectedCategory =
@@ -220,14 +230,31 @@ class _WardrobeScreenState extends ConsumerState<WardrobeScreen> {
                   // Apply Category Filter
                   if (_selectedCategory != null) {
                     if (_selectedCategory == 'Favorites') {
-                      // Mock favorites filtering (assuming is_favorite property or just show random for now if missing)
-                      clothes = clothes.where((c) => c['is_favorite'] == true).toList();
+                      clothes = clothes.where((c) => (c['is_favorite'] == 1 || c['is_favorite'] == true) && (c['temiz'] == 1 || c['temiz'] == true)).toList();
+                    } else if (_selectedCategory == 'Laundry Basket') {
+                      clothes = clothes.where((c) => c['temiz'] == 0 || c['temiz'] == false).toList();
                     } else {
                       clothes = clothes.where((c) {
                         final type = c['tur']?.toString().toLowerCase() ?? '';
-                        return type.contains(_selectedCategory!.toLowerCase());
+                        final category = c['kategori']?.toString().toLowerCase() ?? '';
+                        final tags = c['stil_etiketi']?.toString().toLowerCase() ?? '';
+                        
+                        String searchTarget = _selectedCategory!.toLowerCase();
+                        // Map English chips to Turkish db values
+                        if (searchTarget == 'shirt') searchTarget = 'gömlek';
+                        if (searchTarget == 't-shirt') searchTarget = 'tişört';
+                        if (searchTarget == 'pants') searchTarget = 'pantolon';
+                        if (searchTarget == 'jeans') searchTarget = 'kot';
+                        if (searchTarget == 'shoes') searchTarget = 'ayakkabı';
+                        if (searchTarget == 'accessories') searchTarget = 'aksesuar';
+
+                        final isClean = (c['temiz'] == 1 || c['temiz'] == true);
+                        return (type.contains(searchTarget) || tags.contains(searchTarget) || category.contains(searchTarget)) && isClean;
                       }).toList();
                     }
+                  } else {
+                    // Hide dirty clothes by default when no category is selected
+                    clothes = clothes.where((c) => c['temiz'] == 1 || c['temiz'] == true).toList();
                   }
 
                   // Apply Search Query Filter
@@ -236,7 +263,13 @@ class _WardrobeScreenState extends ConsumerState<WardrobeScreen> {
                         final type = c['tur']?.toString().toLowerCase() ?? '';
                         final color = c['renk']?.toString().toLowerCase() ?? '';
                         final style = c['stil']?.toString().toLowerCase() ?? '';
-                        return type.contains(_searchQuery) || color.contains(_searchQuery) || style.contains(_searchQuery);
+                        final tags = c['stil_etiketi']?.toString().toLowerCase() ?? '';
+                        final brand = c['marka']?.toString().toLowerCase() ?? '';
+                        return type.contains(_searchQuery) || 
+                               color.contains(_searchQuery) || 
+                               style.contains(_searchQuery) ||
+                               tags.contains(_searchQuery) ||
+                               brand.contains(_searchQuery);
                     }).toList();
                   }
 

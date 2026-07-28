@@ -6,7 +6,8 @@ import '../../../../core/theme/app_theme.dart';
 import '../../../../features/auth/presentation/providers/auth_provider.dart';
 import '../../../../services/api_service.dart';
 import '../../../../core/localization/locale_provider.dart';
-
+import '../../domain/models/color_model.dart';
+import '../widgets/clothing_color_picker.dart';
 class AddItemScreen extends ConsumerStatefulWidget {
   const AddItemScreen({super.key});
 
@@ -24,7 +25,7 @@ class _AddItemScreenState extends ConsumerState<AddItemScreen> {
 
   // Form state
   String _tur = 'Tişört';
-  String _renk = 'Siyah';
+  SelectedColor? _selectedColor;
   String _mevsim = 'Tüm Sezon';
   final _markaCtrl = TextEditingController();
   final _bedenCtrl = TextEditingController();
@@ -48,27 +49,7 @@ class _AddItemScreenState extends ConsumerState<AddItemScreen> {
     'Çanta',
     'Aksesuar',
     'Diğer',
-  ];
-
-  static const _renkler = [
-    'Siyah',
-    'Beyaz',
-    'Gri',
-    'Lacivert',
-    'Mavi',
-    'Kırmızı',
-    'Pembe',
-    'Yeşil',
-    'Sarı',
-    'Turuncu',
-    'Mor',
-    'Kahverengi',
-    'Bej',
-    'Bordo',
-    'Karışık',
-  ];
-
-  static const _mevsimler = ['Yaz', 'Kış', 'İlkbahar', 'Sonbahar', 'Tüm Sezon'];
+  ];  static const _mevsimler = ['Yaz', 'Kış', 'İlkbahar', 'Sonbahar', 'Tüm Sezon'];
 
   Future<void> _pickImage(ImageSource source) async {
     final xfile = await _picker.pickImage(
@@ -107,11 +88,28 @@ class _AddItemScreenState extends ConsumerState<AddItemScreen> {
 
             // Renk
             final renkRaw = (analysis['renk'] as String? ?? '');
-            final matchedRenk = _renkler.firstWhere(
-              (r) => r.toLowerCase() == renkRaw.toLowerCase(),
-              orElse: () => '',
-            );
-            if (matchedRenk.isNotEmpty) _renk = matchedRenk;
+            if (renkRaw.isNotEmpty) {
+              for (var mc in clothingColors) {
+                if (mc.name.toLowerCase() == renkRaw.toLowerCase()) {
+                  _selectedColor = SelectedColor(
+                    name: mc.name,
+                    hexCode: mc.primaryHex,
+                    parentCategoryId: mc.id,
+                  );
+                  break;
+                }
+                for (var sc in mc.subColors) {
+                  if (sc.name.toLowerCase() == renkRaw.toLowerCase()) {
+                    _selectedColor = SelectedColor(
+                      name: sc.name,
+                      hexCode: sc.hex,
+                      parentCategoryId: mc.id,
+                    );
+                    break;
+                  }
+                }
+              }
+            }
 
             // Mevsim
             final mevsimRaw = (analysis['mevsim'] as String? ?? '');
@@ -171,7 +169,9 @@ class _AddItemScreenState extends ConsumerState<AddItemScreen> {
 
       final itemData = <String, dynamic>{
         'tur': _tur.toLowerCase(),
-        'renk': _renk.toLowerCase(),
+        'renk': _selectedColor?.name ?? 'Belirsiz',
+        'renk_hex': _selectedColor?.hexCode,
+        'renk_kategori_id': _selectedColor?.parentCategoryId,
         'marka': _markaCtrl.text.isEmpty ? null : _markaCtrl.text,
         'beden': _bedenCtrl.text.isEmpty ? null : _bedenCtrl.text,
         'mevsim': _mevsim.toLowerCase(),
@@ -387,12 +387,11 @@ class _AddItemScreenState extends ConsumerState<AddItemScreen> {
 
             // ── Renk ────────────────────────────────────
             _SectionLabel(text: 'Color *'),
-            _DropdownField(
-              value: _renk,
-              items: _renkler,
-              onChanged: (v) => setState(() => _renk = v!),
-              displayTranslator: (val) =>
-                  s.translateWardrobe(val), // Force translate to English
+            ClothingColorPicker(
+              initialColor: _selectedColor,
+              onColorSelected: (color) {
+                setState(() => _selectedColor = color);
+              },
             ),
 
             const SizedBox(height: 16),

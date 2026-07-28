@@ -70,19 +70,25 @@ class PostCard extends ConsumerWidget {
                       alignment: Alignment.center,
                       children: [
                         InteractiveViewer(
+                          minScale: 0.8,
+                          maxScale: 3.0,
                           clipBehavior: Clip.none,
-                          child: CachedNetworkImage(
-                            imageUrl: post.avatarUrl,
-                            fit: BoxFit.contain,
-                            placeholder: (context, url) =>
-                                CircularProgressIndicator(
-                                    color:
-                                        Theme.of(context).colorScheme.primary),
+                          child: Container(
+                            width: 250,
+                            height: 250,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              border: Border.all(color: Theme.of(context).colorScheme.primary, width: 2),
+                              image: DecorationImage(
+                                image: CachedNetworkImageProvider(post.avatarUrl),
+                                fit: BoxFit.cover,
+                              ),
+                            ),
                           ),
                         ),
                         Positioned(
-                          top: 10,
-                          right: 10,
+                          top: -20,
+                          right: -20,
                           child: IconButton(
                             icon: const Icon(Icons.close,
                                 color: Colors.white, size: 30),
@@ -145,15 +151,52 @@ class PostCard extends ConsumerWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    post.username,
-                    style: TextStyle(
-                      color: Theme.of(context).textTheme.bodyLarge?.color ??
-                          Colors.white,
-                      fontWeight: FontWeight.w600,
-                      fontSize: 14,
-                    ),
-                    semanticsLabel: 'Kullanıcı: ${post.username}',
+                  Row(
+                    children: [
+                      if (post.activeTitle != null && post.activeTitle!.isNotEmpty) ...[
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              colors: [Color(0xFFD4AF37), Color(0xFFF5D060)],
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                            ),
+                            borderRadius: BorderRadius.circular(8),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Color(0xFFD4AF37).withValues(alpha: 0.3),
+                                blurRadius: 4,
+                                offset: const Offset(0, 1),
+                              ),
+                            ],
+                          ),
+                          child: Text(
+                            post.activeTitle!,
+                            style: const TextStyle(
+                              color: Color(0xFF2D1B00),
+                              fontSize: 9,
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: 0.3,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                      ],
+                      Flexible(
+                        child: Text(
+                          post.username,
+                          style: TextStyle(
+                            color: Theme.of(context).textTheme.bodyLarge?.color ??
+                                Colors.white,
+                            fontWeight: FontWeight.w600,
+                            fontSize: 14,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                          semanticsLabel: 'Kullanıcı: ${post.username}',
+                        ),
+                      ),
+                    ],
                   ),
                   const SizedBox(height: 2),
                   Text(
@@ -266,6 +309,7 @@ class PostCard extends ConsumerWidget {
                                       Colors.white)),
                           onTap: () {
                             Navigator.pop(context);
+                            ref.read(feedProvider).hidePost(post.postId);
                             ScaffoldMessenger.of(context).showSnackBar(
                               SnackBar(
                                 content: Text(
@@ -295,6 +339,7 @@ class PostCard extends ConsumerWidget {
       onTap: () {
         showDialog(
           context: context,
+          barrierColor: Colors.black87,
           builder: (_) => Dialog(
             backgroundColor: Colors.transparent,
             insetPadding: const EdgeInsets.all(16),
@@ -303,17 +348,22 @@ class PostCard extends ConsumerWidget {
               children: [
                 InteractiveViewer(
                   clipBehavior: Clip.none,
-                  child: post.imageUrl == 'collage'
-                      ? _buildCollageGrid(context)
-                      : post.imageUrl.startsWith('http')
-                          ? CachedNetworkImage(
-                              imageUrl: post.imageUrl,
-                              fit: BoxFit.contain,
-                              placeholder: (context, url) =>
-                                  CircularProgressIndicator(
-                                      color: Theme.of(context).colorScheme.primary),
-                            )
-                          : Image.file(File(post.imageUrl), fit: BoxFit.contain),
+                  minScale: 0.5,
+                  maxScale: 4.0,
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(24),
+                    child: post.imageUrl == 'collage'
+                        ? _buildCollageGrid(context)
+                        : post.imageUrl.startsWith('http')
+                            ? CachedNetworkImage(
+                                imageUrl: post.imageUrl,
+                                fit: BoxFit.contain,
+                                placeholder: (context, url) =>
+                                    CircularProgressIndicator(
+                                        color: Theme.of(context).colorScheme.primary),
+                              )
+                            : Image.file(File(post.imageUrl), fit: BoxFit.contain),
+                  ),
                 ),
                 Positioned(
                   top: 10,
@@ -640,16 +690,85 @@ class PostCard extends ConsumerWidget {
           runAlignment: WrapAlignment.center,
           children: post.outfitItems.map((item) {
             final url = ApiService.fixImageUrl(item.imageUrl);
-            return Container(
-              width: 150,
-              height: 200,
-              decoration: BoxDecoration(
-                color: Colors.grey[800],
-                borderRadius: BorderRadius.circular(12),
-                image: url.isNotEmpty
-                    ? DecorationImage(
-                        image: NetworkImage(url),
+            return GestureDetector(
+              onTap: () {
+                showDialog(
+                  context: context,
+                  barrierColor: Colors.black87,
+                  builder: (_) => Dialog(
+                    backgroundColor: Colors.transparent,
+                    insetPadding: const EdgeInsets.all(16),
+                    child: Stack(
+                      alignment: Alignment.center,
+                      children: [
+                        Container(
+                          decoration: BoxDecoration(
+                            color: Theme.of(context).cardColor,
+                            borderRadius: BorderRadius.circular(24),
+                          ),
+                          clipBehavior: Clip.antiAlias,
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              url.isNotEmpty 
+                                  ? InteractiveViewer(
+                                      minScale: 0.5,
+                                      maxScale: 4.0,
+                                      child: CachedNetworkImage(
+                                        imageUrl: url,
+                                        fit: BoxFit.contain,
+                                        placeholder: (context, url) => CircularProgressIndicator(color: Theme.of(context).colorScheme.primary),
+                                      ),
+                                    )
+                                  : Container(height: 200, color: Colors.grey[800]),
+                              Padding(
+                                padding: const EdgeInsets.all(16.0),
+                                child: Text(
+                                  'Outfit Item',
+                                  style: TextStyle(
+                                    color: Theme.of(context).textTheme.bodyLarge?.color ?? Colors.white,
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        Positioned(
+                          top: 10,
+                          right: 10,
+                          child: IconButton(
+                            icon: const Icon(Icons.close, color: Colors.white, size: 30),
+                            onPressed: () => Navigator.pop(context),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              },
+              child: Container(
+                width: 150,
+                height: 200,
+                clipBehavior: Clip.antiAlias,
+                decoration: BoxDecoration(
+                  color: Colors.grey[800],
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: url.isNotEmpty
+                    ? CachedNetworkImage(
+                        imageUrl: url,
                         fit: BoxFit.cover,
+                        placeholder: (context, url) => Center(
+                          child: CircularProgressIndicator(
+                            color: Theme.of(context).colorScheme.primary,
+                            strokeWidth: 2,
+                          ),
+                        ),
+                        errorWidget: (context, url, error) => const Center(
+                          child: Icon(Icons.broken_image, color: Colors.grey, size: 40),
+                        ),
                       )
                     : null,
               ),

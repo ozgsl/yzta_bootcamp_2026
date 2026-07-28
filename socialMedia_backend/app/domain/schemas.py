@@ -152,6 +152,7 @@ class UserResponse(BaseModel):
     hips: Optional[str] = None
     location: Optional[str] = None
     timezone: Optional[str] = None
+    active_title: Optional[str] = None
 
 
 class OutfitItemResponse(BaseModel):
@@ -179,6 +180,7 @@ class PostResponse(BaseModel):
     username: str = ""
     display_name: str = ""
     avatar_url: Optional[str] = None
+    active_title: Optional[str] = None
     image_url: str
     caption: Optional[str] = None
     visibility: str = "public"

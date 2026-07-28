@@ -16,6 +16,8 @@ router = APIRouter(tags=["Wardrobe"])
 class KiyafetEkleIstek(BaseModel):
     tur: str
     renk: str
+    renk_hex: Optional[str] = None
+    renk_kategori_id: Optional[str] = None
     marka: Optional[str] = None
     beden: Optional[str] = None
     kumas: Optional[str] = None
@@ -270,5 +272,14 @@ def kiyafet_gorseli_analiz_et(istek: AnalyzeKiyafetIstek):
             "alternatifler": result.get("alternatifler", []),
         },
     }
+
+@router.delete("/outfits/{oneri_id}")
+def kombin_sil(oneri_id: int, db: sqlite3.Connection = Depends(get_db)):
+    """Bir kombini siler."""
+    repo = ItemRepository(db)
+    if repo.kombin_sil(oneri_id):
+        return {"mesaj": "Kombin silindi", "id": oneri_id}
+    else:
+        raise HTTPException(status_code=404, detail="Kombin bulunamadi.")
 
 

@@ -180,6 +180,11 @@ class FeedProvider extends ChangeNotifier {
     _ref.read(profileProvider).loadProfile(currentUserId, currentUserId);
   }
 
+  void hidePost(String postId) {
+    _posts.removeWhere((p) => p.postId == postId);
+    notifyListeners();
+  }
+
   Future<void> updatePost(String postId, String caption) async {
     await _api.updatePost(
         postId: postId, userId: currentUserId, caption: caption);

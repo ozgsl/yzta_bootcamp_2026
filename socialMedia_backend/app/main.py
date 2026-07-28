@@ -11,7 +11,7 @@ from fastapi.staticfiles import StaticFiles
 
 from app.core.config import settings
 from app.core.database import init_db
-from app.api.routers import posts, feed, follows, users, auth, wardrobe, search
+from app.api.routers import posts, feed, follows, users, auth, wardrobe, search, notifications, analytics
 from app.api.routers import likes 
 from app.services.ollama_caption_service import router as captions_router
 from app.services.fashion_classifier import load_model_on_startup
@@ -60,6 +60,8 @@ app.include_router(follows.router, tags=["Follows"])
 app.include_router(users.router,     prefix="/users",    tags=["Users"])
 app.include_router(search.router,    prefix="/search",      tags=["Search"])
 app.include_router(wardrobe.router,  prefix="/wardrobe", tags=["Wardrobe"])
+app.include_router(notifications.router, prefix="/notifications", tags=["Notifications"])
+app.include_router(analytics.router,      prefix="/analytics",      tags=["Analytics"])
 app.include_router(captions_router,  prefix="/captions", tags=["Captions"])
 
 

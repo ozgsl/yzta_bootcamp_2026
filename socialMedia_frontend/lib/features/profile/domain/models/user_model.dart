@@ -17,6 +17,7 @@ class UserModel {
   final String hips;
   final String location;
   final String timezone;
+  final String? activeTitle;
 
   const UserModel({
     required this.userId,
@@ -35,6 +36,7 @@ class UserModel {
     this.hips = '',
     this.location = '',
     this.timezone = '',
+    this.activeTitle,
   });
 
   factory UserModel.fromJson(Map<String, dynamic> json) {
@@ -55,6 +57,7 @@ class UserModel {
       hips: json['hips'] as String? ?? '',
       location: json['location'] as String? ?? '',
       timezone: json['timezone'] as String? ?? '',
+      activeTitle: json['active_title'] as String?,
     );
   }
 
@@ -76,6 +79,7 @@ class UserModel {
       'hips': hips,
       'location': location,
       'timezone': timezone,
+      'active_title': activeTitle,
     };
   }
 
@@ -96,6 +100,7 @@ class UserModel {
     String? hips,
     String? location,
     String? timezone,
+    String? activeTitle,
   }) {
     return UserModel(
       userId: userId ?? this.userId,
@@ -114,6 +119,7 @@ class UserModel {
       hips: hips ?? this.hips,
       location: location ?? this.location,
       timezone: timezone ?? this.timezone,
+      activeTitle: activeTitle ?? this.activeTitle,
     );
   }
 

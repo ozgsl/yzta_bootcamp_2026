@@ -20,7 +20,7 @@ def _get_user_row(db: sqlite3.Connection, user_id: str):
         """
         SELECT user_id, email, username, display_name, avatar_url, bio,
                followers_count, following_count, created_at, profile_visibility,
-               height, weight, chest, waist, hips, location, timezone
+               height, weight, chest, waist, hips, location, timezone, active_title
         FROM users
         WHERE user_id = ?
         """,
@@ -77,6 +77,7 @@ def get_user(
             hips=row["hips"],
             location=row["location"],
             timezone=row["timezone"],
+            active_title=row["active_title"],
         )
 
     except HTTPException:
@@ -209,6 +210,25 @@ def delete_account(
         db.execute("DELETE FROM users WHERE user_id = ?", (user_id,))
         db.commit()
         return MessageResponse(success=True, message="Hesap silindi.")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.put("/{user_id}/title", response_model=MessageResponse)
+def set_active_title(
+    user_id: str,
+    title: Optional[str] = Query(None, description="Seçilen ünvan başlığı. Boş bırakılırsa kaldırılır."),
+    db: sqlite3.Connection = Depends(get_db),
+):
+    """Kullanıcının aktif ünvanını ayarlar veya kaldırır."""
+    try:
+        db.execute(
+            "UPDATE users SET active_title = ? WHERE user_id = ?",
+            (title, user_id),
+        )
+        db.commit()
+        msg = f"Ünvan '{title}' olarak güncellendi." if title else "Ünvan kaldırıldı."
+        return MessageResponse(success=True, message=msg)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

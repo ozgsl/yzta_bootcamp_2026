@@ -742,7 +742,27 @@ class ApiService {
     return await _put('/notifications/$notificationId/read', {});
   }
 
-  // ─── Dispose ────────────────────────────────────────────────
+  // ─── Wardrobe Outfits ──────────────────────────────────────────
+  Future<void> deleteOutfit(int outfitId) async {
+    await _delete('/wardrobe/outfits/$outfitId', null);
+  }
+
+  // ─── Analytics ─────────────────────────────────────────────
+  Future<Map<String, dynamic>> getAnalytics(String userId) async {
+    return await _get('/analytics/$userId');
+  }
+
+  // ─── Title (Ünvan) ────────────────────────────────────────
+  Future<void> setActiveTitle(String userId, String? title) async {
+    final queryParams = title != null ? '?title=${Uri.encodeComponent(title)}' : '?title=';
+    final url = Uri.parse('$baseUrl/users/$userId/title$queryParams');
+    final response = await _client.put(url, headers: _headers).timeout(_timeout);
+    if (response.statusCode != 200) {
+      throw ApiException('Ünvan güncellenemedi', statusCode: response.statusCode);
+    }
+  }
+
+  // ─── Dispose ───────────────────────────────────────────────
   void dispose() {
     _client.close();
   }

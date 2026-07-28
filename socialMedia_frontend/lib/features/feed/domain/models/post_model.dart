@@ -16,6 +16,7 @@ class PostModel {
   final bool isSaved;
   final List<OutfitItem> outfitItems;
   final DateTime createdAt;
+  final String? activeTitle;
 
   const PostModel({
     required this.postId,
@@ -31,6 +32,7 @@ class PostModel {
     required this.isSaved,
     required this.outfitItems,
     required this.createdAt,
+    this.activeTitle,
   });
 
   /// Kısa alias — profile_screen ve provider'lar post.id kullanıyor
@@ -64,6 +66,7 @@ class PostModel {
               ? json['created_at'] as String 
               : '${json['created_at']}Z')
           : DateTime.now(),
+      activeTitle: json['active_title'] as String?,
     );
   }
 
@@ -82,6 +85,7 @@ class PostModel {
       'is_saved': isSaved,
       'outfit_items': outfitItems.map((item) => item.toJson()).toList(),
       'created_at': createdAt.toIso8601String(),
+      'active_title': activeTitle,
     };
   }
 
@@ -99,6 +103,7 @@ class PostModel {
     bool? isSaved,
     List<OutfitItem>? outfitItems,
     DateTime? createdAt,
+    String? activeTitle,
   }) {
     return PostModel(
       postId: postId ?? this.postId,
@@ -114,6 +119,7 @@ class PostModel {
       isSaved: isSaved ?? this.isSaved,
       outfitItems: outfitItems ?? this.outfitItems,
       createdAt: createdAt ?? this.createdAt,
+      activeTitle: activeTitle ?? this.activeTitle,
     );
   }
 

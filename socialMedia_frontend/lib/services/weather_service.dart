@@ -2,6 +2,22 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:geolocator/geolocator.dart';
 
+class WeatherInfo {
+  final double temp;
+  final int code;
+  final String description;
+
+  WeatherInfo({required this.temp, required this.code, required this.description});
+
+  String get recommendation {
+    if (code >= 71 && code <= 77) return 'Kalın giyinmeyi unutma, hava karlı!';
+    if (code >= 61 && code <= 67) return 'Şemsiyeni almayı unutma, hava yağmurlu!';
+    if (temp < 10) return 'Hava soğuk, montunu almanı öneririz.';
+    if (temp < 20) return 'Hava serin, üzerine ince bir ceket alabilirsin.';
+    return 'Hava güzel, hafif şeyler giyebilirsin!';
+  }
+}
+
 class WeatherService {
   static final WeatherService _instance = WeatherService._internal();
   factory WeatherService() => _instance;
@@ -38,10 +54,15 @@ class WeatherService {
   Future<String?> getCurrentWeatherContext() async {
     try {
       final position = await _getCurrentLocation();
-      if (position == null) return null;
+      var latitude = 41.0082;
+      var longitude = 28.9784;
+      if (position != null) {
+        latitude = position.latitude;
+        longitude = position.longitude;
+      }
 
       final url = Uri.parse(
-        'https://api.open-meteo.com/v1/forecast?latitude=${position.latitude}&longitude=${position.longitude}&current_weather=true',
+        'https://api.open-meteo.com/v1/forecast?latitude=$latitude&longitude=$longitude&current_weather=true',
       );
 
       final response = await http.get(url).timeout(const Duration(seconds: 5));
@@ -56,6 +77,36 @@ class WeatherService {
       }
     } catch (e) {
       // Ssssh, silent fail. Weather is just a bonus feature.
+      print('Weather fetch failed: $e');
+    }
+    return null;
+  }
+
+  Future<WeatherInfo?> getDashboardWeather() async {
+    try {
+      final position = await _getCurrentLocation();
+      var latitude = 41.0082;
+      var longitude = 28.9784;
+      if (position != null) {
+        latitude = position.latitude;
+        longitude = position.longitude;
+      }
+
+      final url = Uri.parse(
+        'https://api.open-meteo.com/v1/forecast?latitude=$latitude&longitude=$longitude&current_weather=true',
+      );
+
+      final response = await http.get(url).timeout(const Duration(seconds: 5));
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final current = data['current_weather'];
+        final temp = (current['temperature'] as num).toDouble();
+        final code = current['weathercode'] as int;
+
+        final description = _getWeatherDescription(code);
+        return WeatherInfo(temp: temp, code: code, description: description);
+      }
+    } catch (e) {
       print('Weather fetch failed: $e');
     }
     return null;

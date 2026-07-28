@@ -18,6 +18,7 @@ from typing import Optional
 
 from app.core.database import get_db
 from app.domain.schemas import MessageResponse
+from app.api.routers.notifications import create_notification
 
 router = APIRouter()
 
@@ -42,7 +43,7 @@ class CommentRequest(BaseModel):
 def like_post(post_id: str, req: LikeRequest, db: sqlite3.Connection = Depends(get_db)):
     """Bir postu beğenir."""
     try:
-        post = db.execute("SELECT post_id FROM posts WHERE post_id = ?", (post_id,)).fetchone()
+        post = db.execute("SELECT user_id FROM posts WHERE post_id = ?", (post_id,)).fetchone()
         if not post:
             raise HTTPException(status_code=404, detail="Post bulunamadı")
 
@@ -55,6 +56,17 @@ def like_post(post_id: str, req: LikeRequest, db: sqlite3.Connection = Depends(g
 
         db.execute("INSERT INTO likes (post_id, user_id) VALUES (?, ?)", (post_id, req.user_id))
         db.execute("UPDATE posts SET likes_count = likes_count + 1 WHERE post_id = ?", (post_id,))
+        
+        # Bildirim oluştur
+        if post and post[0] != req.user_id:
+            create_notification(
+                db=db,
+                user_id=post[0],
+                actor_id=req.user_id,
+                notif_type="like",
+                post_id=post_id
+            )
+            
         db.commit()
 
         return MessageResponse(success=True, message="Beğeni eklendi")
@@ -102,7 +114,7 @@ def unlike_post(
 def add_comment(post_id: str, req: CommentRequest, db: sqlite3.Connection = Depends(get_db)):
     """Post'a yorum ekler."""
     try:
-        post = db.execute("SELECT post_id FROM posts WHERE post_id = ?", (post_id,)).fetchone()
+        post = db.execute("SELECT user_id FROM posts WHERE post_id = ?", (post_id,)).fetchone()
         if not post:
             raise HTTPException(status_code=404, detail="Post bulunamadı")
 
@@ -139,6 +151,18 @@ def add_comment(post_id: str, req: CommentRequest, db: sqlite3.Connection = Depe
             )
         except Exception:
             pass  # comments_count sutunu yoksa gec
+            
+        # Bildirim oluştur
+        if post and post[0] != req.user_id:
+            create_notification(
+                db=db,
+                user_id=post[0],
+                actor_id=req.user_id,
+                notif_type="comment",
+                post_id=post_id,
+                comment_id=comment_id
+            )
+            
         db.commit()
 
         return {"success": True, "data": {"comment_id": comment_id}}

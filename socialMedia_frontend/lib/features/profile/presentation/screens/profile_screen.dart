@@ -13,6 +13,8 @@ import 'follow_list_screen.dart';
 import 'edit_profile_screen.dart';
 import '../../../../features/create_post/presentation/screens/create_post_screen.dart';
 import '../../../../features/feed/presentation/providers/feed_provider.dart';
+import '../../../../services/api_service.dart';
+import '../../../home/presentation/screens/analytics_screen.dart';
 
 class ProfileScreen extends ConsumerStatefulWidget {
   final String? userId;
@@ -236,7 +238,20 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                                     children: [
                                       InteractiveViewer(
                                         clipBehavior: Clip.none,
-                                        child: Image.network(user.avatarUrl),
+                                        minScale: 0.8,
+                                        maxScale: 3.0,
+                                        child: Container(
+                                          width: 250,
+                                          height: 250,
+                                          decoration: BoxDecoration(
+                                            shape: BoxShape.circle,
+                                            border: Border.all(color: Theme.of(context).colorScheme.primary, width: 2),
+                                            image: DecorationImage(
+                                              image: NetworkImage(user.avatarUrl),
+                                              fit: BoxFit.cover,
+                                            ),
+                                          ),
+                                        ),
                                       ),
                                       Positioned(
                                         top: 10,
@@ -287,6 +302,72 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                     letterSpacing: 0.5,
                   ),
                 ),
+                // Title badge
+                if (user.activeTitle != null && user.activeTitle!.isNotEmpty) ...[
+                  const SizedBox(height: 6),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(
+                      gradient: const LinearGradient(
+                        colors: [Color(0xFFD4AF37), Color(0xFFF5D060)],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                      ),
+                      borderRadius: BorderRadius.circular(12),
+                      boxShadow: [
+                        BoxShadow(
+                          color: const Color(0xFFD4AF37).withValues(alpha: 0.4),
+                          blurRadius: 6,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
+                    ),
+                    child: Text(
+                      user.activeTitle!,
+                      style: const TextStyle(
+                        color: Color(0xFF2D1B00),
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 0.5,
+                      ),
+                    ),
+                  ),
+                ],
+                // Add/change title button (only on own profile)
+                if (provider.isOwnProfile) ...[
+                  const SizedBox(height: 6),
+                  GestureDetector(
+                    onTap: () => _showTitleSelector(context, ref, user.userId, user.activeTitle),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.4),
+                          width: 1,
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.military_tech_rounded, size: 14, color: Theme.of(context).colorScheme.primary),
+                          const SizedBox(width: 4),
+                          Text(
+                            user.activeTitle != null && user.activeTitle!.isNotEmpty
+                                ? 'Ünvanı Değiştir'
+                                : 'Ünvan Ekle',
+                            style: TextStyle(
+                              color: Theme.of(context).colorScheme.primary,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
                 const SizedBox(height: 4),
                 if (user.bio.isNotEmpty) ...[
                   const SizedBox(height: AppTheme.spacingM),
@@ -509,7 +590,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                   children: [
                     Flexible(
                       child: ClipRRect(
-                        borderRadius: BorderRadius.circular(12),
+                        borderRadius: BorderRadius.circular(20),
                         child: post.imageUrl == 'collage'
                             ? Container(
                                 color: Theme.of(context).colorScheme.surface,
@@ -523,15 +604,21 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                                   ],
                                 ),
                               )
-                            : post.imageUrl.startsWith('http')
-                                ? Image.network(
-                                    post.imageUrl,
-                                    fit: BoxFit.contain,
-                                  )
-                                : Image.file(
-                                    File(post.imageUrl),
-                                    fit: BoxFit.contain,
-                                  ),
+                            : InteractiveViewer(
+                                minScale: 0.8,
+                                maxScale: 3.0,
+                                child: post.imageUrl.startsWith('http')
+                                    ? Image.network(
+                                        post.imageUrl,
+                                        width: double.infinity,
+                                        fit: BoxFit.cover,
+                                      )
+                                    : Image.file(
+                                        File(post.imageUrl),
+                                        width: double.infinity,
+                                        fit: BoxFit.cover,
+                                      ),
+                              ),
                       ),
                     ),
                     Container(
@@ -855,6 +942,127 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                 content: Text('${isTr ? "Silme hatası" : "Delete error"}: $e')),
           );
         }
+      }
+    }
+  }
+
+  Future<void> _showTitleSelector(BuildContext context, WidgetRef ref, String userId, String? currentTitle) async {
+    // Fetch analytics to get unlocked titles
+    try {
+      final data = await ApiService().getAnalytics(userId);
+      final unlockedTitles = (data['unlocked_titles'] as List<dynamic>?) ?? [];
+
+      if (!mounted) return;
+
+      showModalBottomSheet(
+        context: context,
+        backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        builder: (ctx) {
+          return Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Center(
+                  child: Container(
+                    width: 40, height: 4,
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade600,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  'Ünvan Seç 🏆',
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    color: Theme.of(context).textTheme.bodyLarge?.color,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Kazandığın ünvanlardan birini profilinde sergile',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Theme.of(context).textTheme.bodySmall?.color,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                if (currentTitle != null && currentTitle.isNotEmpty)
+                  ListTile(
+                    leading: const Text('🚫', style: TextStyle(fontSize: 22)),
+                    title: Text('Ünvanı Kaldır', style: TextStyle(color: Theme.of(context).textTheme.bodyLarge?.color)),
+                    subtitle: Text('Mevcut ünvanı profilinden kaldır', style: TextStyle(fontSize: 11, color: Theme.of(context).textTheme.bodySmall?.color)),
+                    onTap: () async {
+                      Navigator.pop(ctx);
+                      await ApiService().setActiveTitle(userId, null);
+                      _loadProfile();
+                      ref.invalidate(analyticsProvider);
+                    },
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    tileColor: Theme.of(context).cardColor,
+                  ),
+                if (currentTitle != null && currentTitle.isNotEmpty)
+                  const SizedBox(height: 8),
+                if (unlockedTitles.isEmpty)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 24),
+                    child: Center(
+                      child: Text(
+                        'Henüz kazanılmış ünvan yok.\nAnalytics sayfasından ilerlemenizi takip edin.',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(color: Theme.of(context).textTheme.bodySmall?.color),
+                      ),
+                    ),
+                  )
+                else
+                  ...unlockedTitles.map((t) {
+                    final title = t['title'] as String? ?? '';
+                    final icon = t['icon'] as String? ?? '🏅';
+                    final desc = t['description'] as String? ?? '';
+                    final isSelected = currentTitle == title;
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: ListTile(
+                        leading: Text(icon, style: const TextStyle(fontSize: 22)),
+                        title: Text(title, style: TextStyle(
+                          color: Theme.of(context).textTheme.bodyLarge?.color,
+                          fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                        )),
+                        subtitle: Text(desc, style: TextStyle(fontSize: 11, color: Theme.of(context).textTheme.bodySmall?.color)),
+                        trailing: isSelected
+                            ? Icon(Icons.check_circle, color: Colors.green.shade400)
+                            : Icon(Icons.circle_outlined, color: Theme.of(context).dividerColor),
+                        onTap: () async {
+                          Navigator.pop(ctx);
+                          await ApiService().setActiveTitle(userId, title);
+                          _loadProfile();
+                          ref.invalidate(analyticsProvider);
+                        },
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        tileColor: isSelected
+                            ? Theme.of(context).colorScheme.primary.withValues(alpha: 0.1)
+                            : Theme.of(context).cardColor,
+                      ),
+                    );
+                  }),
+                const SizedBox(height: 8),
+              ],
+            ),
+          );
+        },
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Ünvanlar yüklenemedi: $e')),
+        );
       }
     }
   }

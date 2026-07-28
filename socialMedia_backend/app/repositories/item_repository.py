@@ -9,9 +9,9 @@ KATEGORI_TIPLERI = [
 ]
 
 KIYAFET_ALANLARI = [
-    "tur", "renk", "marka", "beden", "kumas", "kesim", "yaka_tipi",
+    "tur", "renk", "renk_hex", "renk_kategori_id", "marka", "beden", "kumas", "kesim", "yaka_tipi",
     "kol_tipi", "desen", "mevsim", "stil_etiketi", "kullanim_sikligi",
-    "kombin_notu", "temiz", "foto_url",
+    "kombin_notu", "temiz", "foto_url", "is_favorite",
 ]
 
 class ItemRepository:
@@ -50,6 +50,9 @@ class ItemRepository:
         if "temiz" in kolonlar:
             idx = kolonlar.index("temiz")
             degerler[idx] = int(bool(degerler[idx]))
+        if "is_favorite" in kolonlar:
+            idx = kolonlar.index("is_favorite")
+            degerler[idx] = int(bool(degerler[idx]))
 
         kolon_str = ", ".join(["user_id"] + kolonlar)
         soru_isaretleri = ", ".join(["?"] * (len(kolonlar) + 1))
@@ -86,6 +89,9 @@ class ItemRepository:
         degerler = [alanlar[k] for k in kolonlar]
         if "temiz" in kolonlar:
             idx = kolonlar.index("temiz")
+            degerler[idx] = int(bool(degerler[idx]))
+        if "is_favorite" in kolonlar:
+            idx = kolonlar.index("is_favorite")
             degerler[idx] = int(bool(degerler[idx]))
 
         set_ifadesi = ", ".join([f"{k} = ?" for k in kolonlar])
@@ -179,3 +185,8 @@ class ItemRepository:
         except:
             kombin["kiyafetler"] = []
         return kombin
+
+    def kombin_sil(self, oneri_id: int) -> bool:
+        cur = self.db.execute("DELETE FROM kombin_onerileri WHERE id = ?", (oneri_id,))
+        self.db.commit()
+        return cur.rowcount > 0

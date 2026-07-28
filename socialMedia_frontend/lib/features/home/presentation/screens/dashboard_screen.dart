@@ -11,6 +11,14 @@ import '../../../wardrobe/presentation/screens/add_item_screen.dart';
 import 'analytics_screen.dart';
 import '../../../../core/localization/app_strings.dart';
 import '../../../../core/localization/locale_provider.dart';
+import '../../../auth/presentation/providers/auth_provider.dart';
+import '../../../profile/presentation/screens/profile_screen.dart';
+import '../../../notifications/presentation/screens/notifications_screen.dart';
+import '../../../../services/weather_service.dart';
+
+final weatherProvider = FutureProvider<WeatherInfo?>((ref) async {
+  return await WeatherService().getDashboardWeather();
+});
 
 class DashboardScreen extends ConsumerWidget {
   DashboardScreen({super.key});
@@ -36,34 +44,49 @@ class DashboardScreen extends ConsumerWidget {
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: SafeArea(
-        child: RefreshIndicator(
-          onRefresh: () => ref.read(feedProvider).refresh(),
-          child: CustomScrollView(
-            slivers: [
-              SliverToBoxAdapter(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 24.0),
-                  child: Column(
+        child: SingleChildScrollView(
+          padding: EdgeInsets.symmetric(horizontal: 24.0, vertical: 24.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Greeting Row with Notifications
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // Greeting
-              Text(
-                '$greeting, $name',
-                style: TextStyle(
-                  color: Theme.of(context).textTheme.bodyLarge?.color ?? Colors.white,
-                  fontSize: 26,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: -0.5,
-                ),
-              ),
-              SizedBox(height: 4),
-              Text(
-                strings.whatToWear,
-                style: TextStyle(
-                  color: Theme.of(context).textTheme.bodySmall?.color ??
-                      Colors.grey,
-                  fontSize: 14,
-                ),
+                      Text(
+                        '$greeting, $name',
+                        style: TextStyle(
+                          color: Theme.of(context).textTheme.bodyLarge?.color ?? Colors.white,
+                          fontSize: 26,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: -0.5,
+                        ),
+                      ),
+                      SizedBox(height: 4),
+                      Text(
+                        strings.whatToWear,
+                        style: TextStyle(
+                          color: Theme.of(context).textTheme.bodySmall?.color ??
+                              Colors.grey,
+                          fontSize: 14,
+                        ),
+                      ),
+                    ],
+                  ),
+                  IconButton(
+                    icon: Icon(Icons.notifications_none_rounded, size: 28),
+                    color: Theme.of(context).textTheme.bodyLarge?.color ?? Colors.white,
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (_) => const NotificationsScreen()),
+                      );
+                    },
+                  ),
+                ],
               ),
 
               SizedBox(height: 24),
@@ -137,64 +160,79 @@ class DashboardScreen extends ConsumerWidget {
               SizedBox(height: 24),
 
               // Weather Card
-              Container(
-                padding: EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  color: Theme.of(context).cardColor,
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                child: Row(
-                  children: [
-                    Icon(Icons.wb_sunny_rounded, color: Theme.of(context).textTheme.bodyLarge?.color ?? Colors.white, size: 28),
-                    SizedBox(width: 16),
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          '32°C',
-                          style: TextStyle(
-                            color: Theme.of(context).textTheme.bodyLarge?.color ?? Colors.white,
-                            fontSize: 24,
-                            fontWeight: FontWeight.w700,
-                          ),
+              Consumer(
+                builder: (context, ref, child) {
+                  final weatherAsync = ref.watch(weatherProvider);
+                  
+                  return weatherAsync.when(
+                    data: (weather) {
+                      if (weather == null) {
+                        return const SizedBox.shrink();
+                      }
+                      
+                      IconData weatherIcon = Icons.wb_sunny_rounded;
+                      if (weather.code >= 61 && weather.code <= 67) {
+                        weatherIcon = Icons.water_drop_rounded;
+                      } else if (weather.code >= 71 && weather.code <= 77) {
+                        weatherIcon = Icons.ac_unit_rounded;
+                      } else if (weather.code >= 1 && weather.code <= 3) {
+                        weatherIcon = Icons.cloud_rounded;
+                      }
+
+                      return Container(
+                        padding: EdgeInsets.all(20),
+                        decoration: BoxDecoration(
+                          color: Theme.of(context).cardColor,
+                          borderRadius: BorderRadius.circular(16),
                         ),
-                        Text(
-                          'Mostly Sunny',
-                          style: TextStyle(
-                            color:
-                                Theme.of(context).textTheme.bodySmall?.color ??
-                                    Colors.grey,
-                            fontSize: 12,
-                          ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Icon(weatherIcon, color: Theme.of(context).textTheme.bodyLarge?.color ?? Colors.white, size: 28),
+                                SizedBox(width: 16),
+                                Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      '${weather.temp.round()}°C',
+                                      style: TextStyle(
+                                        color: Theme.of(context).textTheme.bodyLarge?.color ?? Colors.white,
+                                        fontSize: 24,
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                    ),
+                                    Text(
+                                      weather.description,
+                                      style: TextStyle(
+                                        color:
+                                            Theme.of(context).textTheme.bodySmall?.color ??
+                                                Colors.grey,
+                                        fontSize: 12,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                            SizedBox(height: 12),
+                            Text(
+                              weather.recommendation,
+                              style: TextStyle(
+                                color: Theme.of(context).colorScheme.primary,
+                                fontSize: 13,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ],
                         ),
-                      ],
-                    ),
-                    Spacer(),
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      children: [
-                        Text(
-                          'feels 31°',
-                          style: TextStyle(
-                            color:
-                                Theme.of(context).textTheme.bodyMedium?.color ??
-                                    Colors.grey,
-                            fontSize: 12,
-                          ),
-                        ),
-                        Text(
-                          '2% chance of rain',
-                          style: TextStyle(
-                            color:
-                                Theme.of(context).textTheme.bodySmall?.color ??
-                                    Colors.grey,
-                            fontSize: 12,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
+                      );
+                    },
+                    loading: () => Center(child: CircularProgressIndicator()),
+                    error: (_, __) => const SizedBox.shrink(),
+                  );
+                },
               ),
 
               SizedBox(height: 32),
@@ -295,118 +333,10 @@ class DashboardScreen extends ConsumerWidget {
                 ],
               ),
 
-                    ],
-                  ),
-                ),
-              ),
-              
-              // Feed Section
-              SliverPadding(
-                padding: const EdgeInsets.only(left: 24, right: 24, top: 16, bottom: 8),
-                sliver: SliverToBoxAdapter(
-                  child: Text(
-                    'Social Feed',
-                    style: TextStyle(
-                      color: Theme.of(context).textTheme.bodyLarge?.color ?? Colors.white,
-                      fontSize: 18,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ),
-              ),
-              
-              _buildFeedSliver(context, ref),
+
+              SizedBox(height: 100), // padding for bottom nav
             ],
           ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildFeedSliver(BuildContext context, WidgetRef ref) {
-    final provider = ref.watch(feedProvider);
-    final currentUserId = ref.watch(authProvider).currentUserId ?? '';
-
-    if (provider.isLoading) {
-      return const SliverToBoxAdapter(
-        child: Center(
-          child: Padding(
-            padding: EdgeInsets.all(32.0),
-            child: CircularProgressIndicator(),
-          ),
-        ),
-      );
-    }
-
-    if (provider.posts.isEmpty) {
-      return SliverToBoxAdapter(
-        child: Container(
-          margin: const EdgeInsets.symmetric(horizontal: 24),
-          padding: const EdgeInsets.all(24),
-          decoration: BoxDecoration(
-            color: Theme.of(context).cardColor,
-            borderRadius: BorderRadius.circular(16),
-          ),
-          child: Column(
-            children: [
-              Icon(Icons.explore_rounded, color: Theme.of(context).textTheme.bodySmall?.color ?? Colors.grey, size: 40),
-              const SizedBox(height: 12),
-              Text(
-                "No posts yet. Follow users to see their posts here!",
-                textAlign: TextAlign.center,
-                style: TextStyle(color: Theme.of(context).textTheme.bodyMedium?.color ?? Colors.grey, fontSize: 14),
-              ),
-            ],
-          ),
-        ),
-      );
-    }
-
-    return SliverPadding(
-      padding: const EdgeInsets.only(bottom: 100),
-      sliver: SliverList(
-        delegate: SliverChildBuilderDelegate(
-          (context, index) {
-            if (index == provider.posts.length) {
-              return Center(
-                child: Padding(
-                  padding: const EdgeInsets.all(16.0),
-                  child: SizedBox(
-                    width: 24, height: 24, 
-                    child: CircularProgressIndicator(strokeWidth: 2, color: Theme.of(context).colorScheme.primary)
-                  ),
-                ),
-              );
-            }
-            final post = provider.posts[index];
-            return Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16.0),
-              child: PostCard(
-                post: post,
-                onLike: (postId) => provider.toggleLike(postId),
-                onSave: (postId) => provider.toggleSave(postId),
-                onComment: () {
-                  CommentsBottomSheet.show(
-                    context,
-                    postId: post.postId,
-                    currentUserId: currentUserId,
-                    initialCommentsCount: post.commentsCount,
-                    onCommentsCountChanged: (count) =>
-                        provider.updateCommentsCount(post.postId, count),
-                  );
-                },
-                onUserTap: (userId) {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => ProfileScreen(userId: userId),
-                    ),
-                  );
-                },
-              ),
-            );
-          },
-          childCount: provider.posts.length + (provider.hasMore ? 1 : 0),
         ),
       ),
     );

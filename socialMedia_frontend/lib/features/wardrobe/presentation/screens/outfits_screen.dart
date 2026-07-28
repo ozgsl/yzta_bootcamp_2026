@@ -139,6 +139,42 @@ class _OutfitsScreenState extends ConsumerState<OutfitsScreen> {
                             ),
                           ),
                           Icon(Icons.check_circle_outline, color: Theme.of(context).colorScheme.primary, size: 20),
+                          const SizedBox(width: 8),
+                          IconButton(
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(),
+                            icon: Icon(Icons.delete_outline, color: Theme.of(context).colorScheme.error, size: 20),
+                            onPressed: () {
+                              showDialog(
+                                context: context,
+                                builder: (ctx) => AlertDialog(
+                                  backgroundColor: Theme.of(context).cardColor,
+                                  title: Text('Kombini Sil', style: TextStyle(color: Theme.of(context).textTheme.bodyLarge?.color ?? Colors.white)),
+                                  content: Text('Bu kombini silmek istediğinize emin misiniz?', style: TextStyle(color: Theme.of(context).textTheme.bodyMedium?.color ?? Colors.grey[300])),
+                                  actions: [
+                                    TextButton(
+                                      onPressed: () => Navigator.pop(ctx),
+                                      child: const Text('İptal', style: TextStyle(color: Colors.grey)),
+                                    ),
+                                    TextButton(
+                                      onPressed: () async {
+                                        Navigator.pop(ctx);
+                                        try {
+                                          await ApiService().deleteOutfit(outfit['id']);
+                                          _loadOutfits();
+                                        } catch (e) {
+                                          if (mounted) {
+                                            ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Hata: $e')));
+                                          }
+                                        }
+                                      },
+                                      child: Text('Sil', style: TextStyle(color: Theme.of(context).colorScheme.error)),
+                                    ),
+                                  ],
+                                ),
+                              );
+                            },
+                          ),
                         ],
                       ),
                       const SizedBox(height: 8),

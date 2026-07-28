@@ -120,7 +120,6 @@ class MoreScreen extends ConsumerWidget {
                                 builder: (_) => const StylePreferencesScreen()),
                           );
                         }),
-                    Divider(height: 1, color: Theme.of(context).dividerColor),
                     _SettingsTile(
                         title: strings.locationTimezone,
                         icon: Icons.location_on_rounded,
@@ -131,7 +130,6 @@ class MoreScreen extends ConsumerWidget {
                                 builder: (_) => const LocationTimezoneScreen()),
                           );
                         }),
-                    Divider(height: 1, color: Theme.of(context).dividerColor),
                     _SettingsTile(
                         title: strings.outfitSchedule,
                         icon: Icons.calendar_today_rounded,
@@ -142,14 +140,12 @@ class MoreScreen extends ConsumerWidget {
                                 builder: (_) => const OutfitScheduleScreen()),
                           );
                         }),
-                    Divider(height: 1, color: Theme.of(context).dividerColor),
                     _SettingsTile(
                         title: strings.language,
                         icon: Icons.language_rounded,
                         onTap: () {
                           _showLanguageDialog(context, ref);
                         }),
-                    Divider(height: 1, color: Theme.of(context).dividerColor),
                     _SettingsTile(
                         title: strings.bodyMeasurements,
                         icon: Icons.straighten_rounded,
@@ -160,7 +156,6 @@ class MoreScreen extends ConsumerWidget {
                                 builder: (_) => const BodyMeasurementScreen()),
                           );
                         }),
-                    Divider(height: 1, color: Theme.of(context).dividerColor),
                     _SettingsTile(
                         title: strings.subscription,
                         icon: Icons.credit_card_rounded,
@@ -193,7 +188,6 @@ class MoreScreen extends ConsumerWidget {
                                 builder: (_) => const TermsOfUseScreen()),
                           );
                         }),
-                    Divider(height: 1, color: Theme.of(context).dividerColor),
                     _SettingsTile(
                         title: strings.privacyPolicy,
                         icon: Icons.security_rounded,

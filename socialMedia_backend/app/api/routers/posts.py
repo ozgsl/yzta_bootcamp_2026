@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from typing import Optional, List
 
 from app.core.database import get_db
+from app.api.routers.notifications import create_notification
 from app.domain.schemas import PostCreate, PostResponse, OutfitItemResponse, MessageResponse
 from app.repositories.post_repository import PostRepository
 
@@ -130,10 +131,22 @@ def save_post(post_id: str, user_id: str = Query(...), db: sqlite3.Connection = 
             )
         """)
         from datetime import datetime
+        saved_at = datetime.utcnow().isoformat()
         db.execute(
             "INSERT OR IGNORE INTO saved_posts (user_id, post_id, saved_at) VALUES (?,?,?)",
-            (user_id, post_id, datetime.utcnow().isoformat())
+            (user_id, post_id, saved_at),
         )
+        
+        post = db.execute("SELECT user_id FROM posts WHERE post_id = ?", (post_id,)).fetchone()
+        if post and post["user_id"] != user_id:
+            create_notification(
+                db=db,
+                user_id=post["user_id"],
+                actor_id=user_id,
+                notif_type="save",
+                post_id=post_id
+            )
+        
         db.commit()
         return {"success": True, "message": "Kaydedildi"}
     except Exception as e:

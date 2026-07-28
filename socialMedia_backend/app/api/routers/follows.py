@@ -19,6 +19,7 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from app.core.database import get_db
 from app.domain.schemas import FollowRequest, MessageResponse
+from app.api.routers.notifications import create_notification
 
 router = APIRouter()
 
@@ -62,6 +63,14 @@ def follow_user(req: FollowRequest, db: sqlite3.Connection = Depends(get_db)):
         db.execute(
             "UPDATE users SET followers_count = followers_count + 1 WHERE user_id = ?",
             (req.following_id,),
+        )
+        
+        # Bildirim oluştur
+        create_notification(
+            db=db,
+            user_id=req.following_id,
+            actor_id=req.follower_id,
+            notif_type="follow"
         )
 
         db.commit()
