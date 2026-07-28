@@ -104,18 +104,21 @@ class _LocationTimezoneScreenState extends ConsumerState<LocationTimezoneScreen>
                 itemCount: timezones.length,
                 itemBuilder: (context, index) {
                   final t = timezones[index];
-                  return ListTile(
-                    title: Text(
-                      t,
-                      style: TextStyle(
-                        color: Theme.of(context).textTheme.bodyMedium?.color ?? Colors.grey,
+                  return Material(
+                    color: Colors.transparent,
+                    child: ListTile(
+                      title: Text(
+                        t,
+                        style: TextStyle(
+                          color: Theme.of(context).textTheme.bodyMedium?.color ?? Colors.grey,
+                        ),
                       ),
+                      onTap: () {
+                        setState(() => _selectedTimezone = t);
+                        _save();
+                        Navigator.pop(context);
+                      },
                     ),
-                    onTap: () {
-                      setState(() => _selectedTimezone = t);
-                      _save();
-                      Navigator.pop(context);
-                    },
                   );
                 },
               ),
