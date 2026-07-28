@@ -15,7 +15,9 @@ class LocationTimezoneScreen extends ConsumerStatefulWidget {
 
 class _LocationTimezoneScreenState extends ConsumerState<LocationTimezoneScreen> {
   String _selectedCountry = '';
+  String _selectedCity = '';
   String _selectedTimezone = '';
+  final _cityController = TextEditingController();
 
   @override
   void initState() {
@@ -24,12 +26,28 @@ class _LocationTimezoneScreenState extends ConsumerState<LocationTimezoneScreen>
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final user = ref.read(profileProvider).user;
       if (user != null) {
-        setState(() {
-          _selectedCountry = user.location;
-          _selectedTimezone = user.timezone;
-        });
+        final parts = user.location.split(',');
+        if (parts.length >= 2) {
+          setState(() {
+            _selectedCity = parts[0].trim();
+            _selectedCountry = parts.sublist(1).join(',').trim();
+          });
+        } else {
+          setState(() {
+            _selectedCountry = user.location.trim();
+            _selectedCity = '';
+          });
+        }
+        _cityController.text = _selectedCity;
+        setState(() => _selectedTimezone = user.timezone);
       }
     });
+  }
+
+  @override
+  void dispose() {
+    _cityController.dispose();
+    super.dispose();
   }
 
   void _pickCountry() {
@@ -49,8 +67,10 @@ class _LocationTimezoneScreenState extends ConsumerState<LocationTimezoneScreen>
       onSelect: (Country country) {
         setState(() {
           _selectedCountry = country.name;
+          // Reset city when country changes
+          _selectedCity = '';
+          _cityController.clear();
         });
-        _save();
       },
     );
   }
@@ -92,9 +112,7 @@ class _LocationTimezoneScreenState extends ConsumerState<LocationTimezoneScreen>
                       ),
                     ),
                     onTap: () {
-                      setState(() {
-                        _selectedTimezone = t;
-                      });
+                      setState(() => _selectedTimezone = t);
                       _save();
                       Navigator.pop(context);
                     },
@@ -109,9 +127,21 @@ class _LocationTimezoneScreenState extends ConsumerState<LocationTimezoneScreen>
   }
 
   Future<void> _save() async {
+    // Build location string: "City, Country" if both present, else just country
+    final city = _cityController.text.trim();
+    final country = _selectedCountry.trim();
+    String locationStr;
+    if (city.isNotEmpty && country.isNotEmpty) {
+      locationStr = '$city, $country';
+    } else if (city.isNotEmpty) {
+      locationStr = city;
+    } else {
+      locationStr = country;
+    }
+
     try {
       await ref.read(profileProvider).updateProfile(
-            location: _selectedCountry,
+            location: locationStr,
             timezone: _selectedTimezone,
           );
       if (!mounted) return;
@@ -122,6 +152,7 @@ class _LocationTimezoneScreenState extends ConsumerState<LocationTimezoneScreen>
         ),
       );
     } catch (e) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Error saving: $e'),
@@ -133,10 +164,24 @@ class _LocationTimezoneScreenState extends ConsumerState<LocationTimezoneScreen>
 
   @override
   Widget build(BuildContext context) {
+    final countrySelected = _selectedCountry.isNotEmpty;
+
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
         title: const Text('Location & Timezone'),
+        actions: [
+          TextButton(
+            onPressed: _save,
+            child: Text(
+              'Save',
+              style: TextStyle(
+                color: Theme.of(context).colorScheme.primary,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+        ],
       ),
       body: Padding(
         padding: const EdgeInsets.all(24.0),
@@ -148,19 +193,101 @@ class _LocationTimezoneScreenState extends ConsumerState<LocationTimezoneScreen>
               style: TextStyle(color: Colors.grey, fontSize: 14),
             ),
             const SizedBox(height: 32),
+
+            // Country picker tile
             _buildSelectionTile(
-              label: 'Country/Location',
+              label: 'Country',
               value: _selectedCountry.isEmpty ? 'Select Country' : _selectedCountry,
               icon: Icons.public_rounded,
               onTap: _pickCountry,
             ),
+
             const SizedBox(height: 16),
+
+            // City text field — enabled only after country is selected
+            AnimatedOpacity(
+              opacity: countrySelected ? 1.0 : 0.4,
+              duration: const Duration(milliseconds: 300),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                decoration: BoxDecoration(
+                  color: Theme.of(context).cardColor,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(
+                    color: countrySelected
+                        ? Theme.of(context).colorScheme.primary.withOpacity(0.5)
+                        : Colors.transparent,
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.location_city_rounded,
+                      color: countrySelected ? AppTheme.accentViolet : Colors.grey,
+                      size: 28,
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'City (for weather)',
+                            style: const TextStyle(color: Colors.grey, fontSize: 12),
+                          ),
+                          TextField(
+                            controller: _cityController,
+                            enabled: countrySelected,
+                            style: TextStyle(
+                              color: Theme.of(context).textTheme.bodyLarge?.color ?? Colors.white,
+                              fontSize: 16,
+                              fontWeight: FontWeight.w500,
+                            ),
+                            decoration: InputDecoration(
+                              hintText: countrySelected
+                                  ? 'e.g. Antalya, Istanbul, London'
+                                  : 'Select a country first',
+                              hintStyle: const TextStyle(color: Colors.grey, fontSize: 14),
+                              border: InputBorder.none,
+                              isDense: true,
+                              contentPadding: const EdgeInsets.symmetric(vertical: 4),
+                            ),
+                            onChanged: (val) => setState(() => _selectedCity = val),
+                            onSubmitted: (_) => _save(),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
+            const SizedBox(height: 16),
+
+            // Timezone picker tile
             _buildSelectionTile(
               label: 'Timezone',
               value: _selectedTimezone.isEmpty ? 'Select Timezone' : _selectedTimezone,
               icon: Icons.access_time_rounded,
               onTap: _pickTimezone,
             ),
+
+            const SizedBox(height: 8),
+            if (countrySelected && _cityController.text.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Row(
+                  children: [
+                    const Icon(Icons.info_outline, color: Colors.grey, size: 14),
+                    const SizedBox(width: 6),
+                    Text(
+                      'Weather will be fetched for: ${_cityController.text.trim()}, $_selectedCountry',
+                      style: const TextStyle(color: Colors.grey, fontSize: 12),
+                    ),
+                  ],
+                ),
+              ),
           ],
         ),
       ),
@@ -203,7 +330,7 @@ class _LocationTimezoneScreenState extends ConsumerState<LocationTimezoneScreen>
                ],
               ),
             ),
-            Icon(Icons.chevron_right_rounded, color: Colors.grey),
+            const Icon(Icons.chevron_right_rounded, color: Colors.grey),
           ],
         ),
       ),
