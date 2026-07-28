@@ -30,6 +30,7 @@ dependencies:
   google_sign_in: ^6.2.1
   country_picker: ^2.0.28
   flutter_colorpicker: ^1.1.0
+  csc_picker: ^0.2.7
 
 dev_dependencies:
   flutter_test:
