@@ -4,7 +4,7 @@ import '../../../../services/api_service.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
 
 final analyticsProvider = FutureProvider.autoDispose<Map<String, dynamic>>((ref) async {
-  final userId = ref.watch(authProvider).userId;
+  final userId = ref.watch(authProvider).currentUserId;
   if (userId == null || userId.isEmpty) return {};
   return await ApiService().getAnalytics(userId);
 });
