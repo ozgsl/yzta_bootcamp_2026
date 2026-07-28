@@ -112,22 +112,27 @@ class WeatherService {
       double latitude = 41.0082;
       double longitude = 28.9784;
       String cityName = 'İstanbul';
+      bool foundCoords = false;
 
-      // 1. Önce GPS konumunu dene
-      final position = await _getCurrentLocation();
-      if (position != null) {
-        latitude = position.latitude;
-        longitude = position.longitude;
-        cityName = 'Konumun (GPS)';
-      } else if (manualLocation != null && manualLocation.trim().isNotEmpty) {
-        // 2. GPS yoksa kullanıcının profildeki manuel konumunu kullan
+      // 1. Eğer profilde manuel şehir tanımlanmışsa öncelikle bu şehri ara
+      if (manualLocation != null && manualLocation.trim().isNotEmpty) {
         final geo = await _getCoordsFromCityName(manualLocation);
         if (geo != null) {
           latitude = geo['lat'];
           longitude = geo['lon'];
           cityName = geo['name'];
-        } else {
-          cityName = manualLocation.trim();
+          foundCoords = true;
+        }
+      }
+
+      // 2. Manuel şehir girilmediyse GPS dene
+      if (!foundCoords) {
+        final position = await _getCurrentLocation();
+        if (position != null) {
+          latitude = position.latitude;
+          longitude = position.longitude;
+          cityName = 'Konumun (GPS)';
+          foundCoords = true;
         }
       }
 
@@ -154,9 +159,9 @@ class WeatherService {
       print('[WeatherService] Weather fetch failed: $e');
     }
 
-    // Varsayılan Güvenli Fallback (Kartın yok olmaması için)
+    // Varsayılan Güvenli Fallback
     return WeatherInfo(
-      temp: 22.0,
+      temp: 28.0,
       code: 0,
       description: 'Güneşli / Açık',
       cityName: (manualLocation?.isNotEmpty == true) ? manualLocation! : 'İstanbul',

@@ -16,7 +16,7 @@ import '../../../profile/presentation/screens/profile_screen.dart';
 import '../../../notifications/presentation/screens/notifications_screen.dart';
 import '../../../../services/weather_service.dart';
 
-final weatherProvider = FutureProvider<WeatherInfo?>((ref) async {
+final weatherProvider = FutureProvider.autoDispose<WeatherInfo?>((ref) async {
   final user = ref.watch(profileProvider).user;
   return await WeatherService().getDashboardWeather(manualLocation: user?.location);
 });
