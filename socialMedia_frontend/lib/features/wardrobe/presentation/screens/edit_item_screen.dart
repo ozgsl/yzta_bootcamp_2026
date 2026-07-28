@@ -171,13 +171,13 @@ class _EditItemScreenState extends ConsumerState<EditItemScreen> {
       if (mounted) {
         Navigator.pop(context, true);
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('✅ Kıyafet güncellendi!')),
+          SnackBar(content: Text(s.isTr ? '✅ Kıyafet güncellendi!' : '✅ Clothing updated!')),
         );
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Hata: $e')),
+          SnackBar(content: Text('${s.isTr ? "Hata" : "Error"}: $e')),
         );
       }
     } finally {
@@ -186,28 +186,31 @@ class _EditItemScreenState extends ConsumerState<EditItemScreen> {
   }
 
   Future<void> _deleteItem() async {
+    final s = ref.read(stringsProvider);
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: Theme.of(context).cardColor,
-        title: Text('Delete Clothing',
+        title: Text(s.isTr ? 'Kıyafeti Sil' : 'Delete Clothing',
             style: TextStyle(color: Theme.of(context).colorScheme.error)),
         content: Text(
-            'Are you sure you want to delete this clothing from your wardrobe?',
+            s.isTr 
+              ? 'Bu kıyafeti gardırobunuzdan silmek istediğinize emin misiniz?'
+              : 'Are you sure you want to delete this clothing from your wardrobe?',
             style: TextStyle(
                 color: Theme.of(context).textTheme.bodyLarge?.color ??
                     Colors.white)),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: Text('Cancel',
+            child: Text(s.isTr ? 'İptal' : 'Cancel',
                 style: TextStyle(
                     color: Theme.of(context).textTheme.bodySmall?.color ??
                         Colors.grey)),
           ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: Text('Delete',
+            child: Text(s.isTr ? 'Sil' : 'Delete',
                 style: TextStyle(color: Theme.of(context).colorScheme.error)),
           ),
         ],
@@ -221,13 +224,13 @@ class _EditItemScreenState extends ConsumerState<EditItemScreen> {
         if (mounted) {
           Navigator.pop(context, true);
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Kıyafet silindi.')),
+            SnackBar(content: Text(s.isTr ? 'Kıyafet silindi.' : 'Clothing deleted.')),
           );
         }
       } catch (e) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Silme hatası: $e')),
+            SnackBar(content: Text('${s.isTr ? "Silme hatası" : "Delete error"}: $e')),
           );
         }
       } finally {
@@ -442,14 +445,16 @@ class _EditItemScreenState extends ConsumerState<EditItemScreen> {
               ),
               child: SwitchListTile(
                 title: Text(
-                  _isDirty ? 'Kirli Sepetinde' : 'Dolapta (Temiz)',
+                  _isDirty 
+                    ? (s.isTr ? 'Kirli Sepetinde' : 'Laundry Basket')
+                    : (s.isTr ? 'Dolapta (Temiz)' : 'In Closet (Clean)'),
                   style: TextStyle(
                     color: Theme.of(context).textTheme.bodyLarge?.color ?? Colors.white,
                     fontWeight: FontWeight.w500,
                   ),
                 ),
                 subtitle: Text(
-                  'Bu kıyafet kirli sepetinde mi?',
+                  s.isTr ? 'Bu kıyafet kirli sepetinde mi?' : 'Is this clothing in the laundry basket?',
                   style: TextStyle(
                     color: Theme.of(context).textTheme.bodySmall?.color ?? Colors.grey,
                   ),
@@ -486,7 +491,7 @@ class _EditItemScreenState extends ConsumerState<EditItemScreen> {
                     : Icon(Icons.delete_outline_rounded,
                         color: Theme.of(context).colorScheme.error),
                 label: Text(
-                  'Kıyafeti Sil',
+                  s.isTr ? 'Kıyafeti Sil' : 'Delete Clothing',
                   style: TextStyle(
                       color: Theme.of(context).colorScheme.error,
                       fontWeight: FontWeight.bold),

@@ -20,7 +20,8 @@ class EditProfileScreen extends ConsumerStatefulWidget {
 class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
   final _displayNameController = TextEditingController();
   final _bioController = TextEditingController();
-  final _locationController = TextEditingController();
+  final _cityController = TextEditingController();
+  final _countryController = TextEditingController();
   final _avatarUrlController = TextEditingController();
   final _picker = ImagePicker();
   File? _selectedImage;
@@ -33,8 +34,16 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
     if (user != null) {
       _displayNameController.text = user.displayName;
       _bioController.text = user.bio;
-      _locationController.text = user.location;
       _avatarUrlController.text = user.avatarUrl;
+
+      final locParts = user.location.split(',');
+      if (locParts.length > 1) {
+        _cityController.text = locParts[0].trim();
+        _countryController.text = locParts.sublist(1).join(',').trim();
+      } else {
+        _cityController.text = user.location.trim();
+        _countryController.text = '';
+      }
     }
   }
 
@@ -71,11 +80,22 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
         if (uploadedUrl != null) avatarUrl = uploadedUrl;
       }
 
+      String locationStr = '';
+      final city = _cityController.text.trim();
+      final country = _countryController.text.trim();
+      if (city.isNotEmpty && country.isNotEmpty) {
+        locationStr = '$city, $country';
+      } else if (city.isNotEmpty) {
+        locationStr = city;
+      } else if (country.isNotEmpty) {
+        locationStr = country;
+      }
+
       await ApiService().updateProfile(
         userId: userId,
         displayName: _displayNameController.text,
         bio: _bioController.text,
-        location: _locationController.text,
+        location: locationStr,
         avatarUrl: avatarUrl,
       );
 
@@ -196,24 +216,52 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
               ),
             ),
             const SizedBox(height: 24),
-            TextField(
-              controller: _locationController,
-              style: TextStyle(
-                  color: Theme.of(context).textTheme.bodyLarge?.color ??
-                      Colors.white),
-              decoration: InputDecoration(
-                labelText: s.isTr ? 'Konum / Şehir (Hava Durumu İçin)' : 'Location / City (For Weather)',
-                hintText: s.isTr ? 'Örn: İstanbul, Ankara, İzmir...' : 'e.g. Istanbul, London...',
-                labelStyle: TextStyle(
-                    color: Theme.of(context).textTheme.bodySmall?.color ??
-                        Colors.grey),
-                enabledBorder: UnderlineInputBorder(
-                    borderSide:
-                        BorderSide(color: Theme.of(context).dividerColor)),
-                focusedBorder: UnderlineInputBorder(
-                    borderSide: BorderSide(
-                        color: Theme.of(context).colorScheme.primary)),
-              ),
+            Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _cityController,
+                    style: TextStyle(
+                        color: Theme.of(context).textTheme.bodyLarge?.color ??
+                            Colors.white),
+                    decoration: InputDecoration(
+                      labelText: s.isTr ? 'Şehir (Hava Durumu)' : 'City (Weather)',
+                      hintText: s.isTr ? 'Örn: Antalya, İstanbul' : 'e.g. London, Istanbul',
+                      labelStyle: TextStyle(
+                          color: Theme.of(context).textTheme.bodySmall?.color ??
+                              Colors.grey),
+                      enabledBorder: UnderlineInputBorder(
+                          borderSide:
+                              BorderSide(color: Theme.of(context).dividerColor)),
+                      focusedBorder: UnderlineInputBorder(
+                          borderSide: BorderSide(
+                              color: Theme.of(context).colorScheme.primary)),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: TextField(
+                    controller: _countryController,
+                    style: TextStyle(
+                        color: Theme.of(context).textTheme.bodyLarge?.color ??
+                            Colors.white),
+                    decoration: InputDecoration(
+                      labelText: s.isTr ? 'Ülke' : 'Country',
+                      hintText: s.isTr ? 'Örn: Türkiye' : 'e.g. UK, Turkey',
+                      labelStyle: TextStyle(
+                          color: Theme.of(context).textTheme.bodySmall?.color ??
+                              Colors.grey),
+                      enabledBorder: UnderlineInputBorder(
+                          borderSide:
+                              BorderSide(color: Theme.of(context).dividerColor)),
+                      focusedBorder: UnderlineInputBorder(
+                          borderSide: BorderSide(
+                              color: Theme.of(context).colorScheme.primary)),
+                    ),
+                  ),
+                ),
+              ],
             ),
             const SizedBox(height: 24),
             TextField(

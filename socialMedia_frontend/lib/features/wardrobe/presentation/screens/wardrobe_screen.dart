@@ -45,6 +45,7 @@ class _WardrobeScreenState extends ConsumerState<WardrobeScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final s = ref.watch(stringsProvider);
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: SafeArea(
@@ -59,7 +60,7 @@ class _WardrobeScreenState extends ConsumerState<WardrobeScreen> {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text(
-                    'My Wardrobe',
+                    s.isTr ? 'Gardırobum' : 'My Wardrobe',
                     style: TextStyle(
                       color: Theme.of(context).textTheme.bodyLarge?.color ?? Colors.white,
                       fontSize: 24,
@@ -71,7 +72,7 @@ class _WardrobeScreenState extends ConsumerState<WardrobeScreen> {
                     children: [
                       IconButton(
                         icon: Icon(Icons.style_rounded, color: Theme.of(context).iconTheme.color ?? Colors.white, size: 28),
-                        tooltip: 'Kombinlerim',
+                        tooltip: s.isTr ? 'Kombinlerim' : 'My Outfits',
                         onPressed: () {
                           Navigator.push(
                             context,
@@ -125,7 +126,7 @@ class _WardrobeScreenState extends ConsumerState<WardrobeScreen> {
                         style:
                             TextStyle(color: Theme.of(context).textTheme.bodyLarge?.color ?? Colors.white, fontSize: 14),
                         decoration: InputDecoration(
-                          hintText: 'Search items...',
+                          hintText: s.isTr ? 'Kıyafet ara...' : 'Search items...',
                           hintStyle: TextStyle(
                               color: Theme.of(context)
                                       .textTheme
@@ -152,16 +153,16 @@ class _WardrobeScreenState extends ConsumerState<WardrobeScreen> {
               child: Row(
                 children: [
                   _FilterChip(
-                    label: 'Favorites',
+                    label: s.isTr ? 'Favoriler' : 'Favorites',
                     isSelected: _selectedCategory == 'Favorites',
                     onTap: () => setState(() => _selectedCategory =
                         _selectedCategory == 'Favorites' ? null : 'Favorites'),
                   ),
                   _FilterChip(
-                    label: 'Kirli Sepeti',
-                    isSelected: _selectedCategory == 'Kirli Sepeti',
+                    label: s.isTr ? 'Kirli Sepeti' : 'Laundry Basket',
+                    isSelected: _selectedCategory == 'Laundry Basket' || _selectedCategory == 'Kirli Sepeti',
                     onTap: () => setState(() => _selectedCategory =
-                        _selectedCategory == 'Kirli Sepeti' ? null : 'Kirli Sepeti'),
+                        (_selectedCategory == 'Laundry Basket' || _selectedCategory == 'Kirli Sepeti') ? null : 'Laundry Basket'),
                   ),
                   _FilterChip(
                     label: 'Shirt',

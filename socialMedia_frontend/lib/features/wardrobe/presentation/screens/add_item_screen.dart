@@ -175,15 +175,16 @@ class _AddItemScreenState extends ConsumerState<AddItemScreen> {
         if (analysis != null) {
           ScaffoldMessenger.of(context).showSnackBar(SnackBar(
             content: Text(
-              '✨ AI analiz: ${analysis['tur'] ?? ''} '
-              '(${analysis['renk'] ?? ''}, ${analysis['stil_etiketi'] ?? ''})',
+              s.isTr 
+                ? '✨ AI analiz: ${analysis['tur'] ?? ''} (${analysis['renk'] ?? ''}, ${analysis['stil_etiketi'] ?? ''})'
+                : '✨ AI Analysis: ${s.translateWardrobe(analysis['tur']?.toString() ?? '')} (${analysis['renk'] ?? ''}, ${analysis['stil_etiketi'] ?? ''})',
             ),
             backgroundColor: Theme.of(context).colorScheme.primary,
             duration: const Duration(seconds: 3),
           ));
         } else if (url != null) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Görsel yüklendi')),
+            SnackBar(content: Text(s.isTr ? 'Görsel yüklendi' : 'Image uploaded')),
           );
         }
       }
@@ -191,7 +192,7 @@ class _AddItemScreenState extends ConsumerState<AddItemScreen> {
       debugPrint('Upload/Analyze error: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Yükleme hatası: $e')),
+          SnackBar(content: Text('${s.isTr ? "Yükleme hatası" : "Upload error"}: $e')),
         );
       }
     } finally {
@@ -200,10 +201,11 @@ class _AddItemScreenState extends ConsumerState<AddItemScreen> {
   }
 
   Future<void> _submit() async {
+    final s = ref.read(stringsProvider);
     final userId = ref.read(authProvider).currentUserId;
     if (userId == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Giriş yapmanız gerekiyor.')),
+        SnackBar(content: Text(s.isTr ? 'Giriş yapmanız gerekiyor.' : 'Please log in first.')),
       );
       return;
     }
@@ -237,13 +239,13 @@ class _AddItemScreenState extends ConsumerState<AddItemScreen> {
       if (mounted) {
         Navigator.pop(context, true);
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('✅ Kıyafet başarıyla eklendi!')),
+          SnackBar(content: Text(s.isTr ? '✅ Kıyafet başarıyla eklendi!' : '✅ Clothing added successfully!')),
         );
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Hata: $e')),
+          SnackBar(content: Text('${s.isTr ? "Hata" : "Error"}: $e')),
         );
       }
     } finally {
