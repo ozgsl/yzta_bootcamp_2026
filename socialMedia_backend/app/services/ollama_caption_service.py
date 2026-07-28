@@ -65,7 +65,7 @@ def _image_to_base64(image_url: Optional[str]) -> Optional[str]:
             resp.raise_for_status()
             return base64.b64encode(resp.content).decode()
     except Exception as e:
-        print(f"[Vision] Görsel indirilemedi ({image_url}): {e}")
+        print(f"[Vision] Image download error ({image_url}): {e}")
         return None
 
 
@@ -121,10 +121,10 @@ def _caption_with_llava(
             result = resp.json().get("response", "").strip()
             return result[:280] if result else None
     except httpx.ConnectError:
-        print("[llava] Ollama bağlantı hatası — ollama serve çalışıyor mu?")
+        print("[llava] Ollama connection error - is ollama serve running?")
         return None
     except Exception as e:
-        print(f"[llava] Hata: {e}")
+        print(f"[llava] Error: {e}")
         return None
 
 
@@ -162,10 +162,10 @@ def _caption_text_only(
             resp.raise_for_status()
             return resp.json().get("response", "").strip()[:250]
     except httpx.ConnectError:
-        print("[llama3.2] Ollama bağlantı hatası.")
+        print("[llama3.2] Ollama connection error.")
         return ""
     except Exception as e:
-        print(f"[llama3.2] Hata: {e}")
+        print(f"[llama3.2] Error: {e}")
         return ""
 
 
@@ -212,7 +212,7 @@ async def suggest_caption(req: CaptionRequestExtended):
                 if result.get("success"):
                     fashion_analysis = result
         except Exception as e:
-            print(f"[FashionSigLIP] Suggest analiz hatası: {e}")
+            print(f"[FashionSigLIP] Suggest analysis error: {e}")
 
     caption: Optional[str] = None
 
@@ -277,7 +277,7 @@ async def upload_image(file: UploadFile = File(...)):
                     "alternatifler": result.get("alternatifler", []),
                 }
         except Exception as e:
-            print(f"[FashionSigLIP] Upload analiz hatası: {e}")
+            print(f"[FashionSigLIP] Upload analysis error: {e}")
 
     return {"url": url, "filename": filename, "ai_analysis": ai_analysis}
 
