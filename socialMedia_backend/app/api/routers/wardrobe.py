@@ -31,6 +31,16 @@ class ClothCreateRequest(BaseModel):
     kombin_notu: Optional[str] = None
     temiz: bool = True
     foto_url: Optional[str] = None
+    is_favorite: bool = False
+
+
+class LaundryStatusRequest(BaseModel):
+    is_dirty: bool
+
+
+class FavoriteStatusRequest(BaseModel):
+    is_favorite: bool
+
 
 # Aliases for backwards compatibility
 KiyafetEkleIstek = ClothCreateRequest
@@ -96,6 +106,26 @@ def update_cloth(item_id: int, request: ClothCreateRequest, db: sqlite3.Connecti
         raise
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Error updating clothing item: {str(e)}")
+
+
+@router.patch("/items/{item_id}/laundry")
+def set_laundry_status(item_id: int, request: LaundryStatusRequest, db: sqlite3.Connection = Depends(get_db)):
+    """Quickly toggle laundry (dirty/clean) status of a clothing item."""
+    repo = ItemRepository(db)
+    updated = repo.update_cloth(item_id=item_id, temiz=not request.is_dirty)
+    if not updated:
+        raise HTTPException(status_code=404, detail="Clothing item not found.")
+    return {"message": "Laundry status updated", "id": item_id, "is_dirty": request.is_dirty}
+
+
+@router.patch("/items/{item_id}/favorite")
+def set_favorite_status(item_id: int, request: FavoriteStatusRequest, db: sqlite3.Connection = Depends(get_db)):
+    """Quickly toggle favorite status of a clothing item."""
+    repo = ItemRepository(db)
+    updated = repo.update_cloth(item_id=item_id, is_favorite=request.is_favorite)
+    if not updated:
+        raise HTTPException(status_code=404, detail="Clothing item not found.")
+    return {"message": "Favorite status updated", "id": item_id, "is_favorite": request.is_favorite}
 
 
 @router.delete("/items/{item_id}")

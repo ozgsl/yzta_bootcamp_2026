@@ -609,6 +609,16 @@ class ApiService {
     return await _put('/wardrobe/items/$itemId', itemData);
   }
 
+  /// Quickly toggle laundry (dirty) status without a full PUT.
+  Future<void> setLaundryStatus(int itemId, {required bool isDirty}) async {
+    await _patch('/wardrobe/items/$itemId/laundry', {'is_dirty': isDirty});
+  }
+
+  /// Quickly toggle favorite status without a full PUT.
+  Future<void> setFavoriteStatus(int itemId, {required bool isFavorite}) async {
+    await _patch('/wardrobe/items/$itemId/favorite', {'is_favorite': isFavorite});
+  }
+
   Future<dynamic> deleteCloth(int itemId) async {
     return await _delete('/wardrobe/items/$itemId', null);
   }

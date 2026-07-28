@@ -315,10 +315,18 @@ class _EditItemScreenState extends ConsumerState<EditItemScreen> {
               _isFavorite ? Icons.favorite_rounded : Icons.favorite_border_rounded,
               color: _isFavorite ? Colors.redAccent : (Theme.of(context).textTheme.bodyLarge?.color ?? Colors.white),
             ),
-            onPressed: () {
-              setState(() {
-                _isFavorite = !_isFavorite;
-              });
+            onPressed: () async {
+              final newVal = !_isFavorite;
+              setState(() => _isFavorite = newVal);
+              try {
+                await ApiService().setFavoriteStatus(
+                  widget.initialItem['id'] as int,
+                  isFavorite: newVal,
+                );
+              } catch (_) {
+                // revert on failure
+                if (mounted) setState(() => _isFavorite = !newVal);
+              }
             },
           ),
           _isLoading
@@ -466,10 +474,18 @@ class _EditItemScreenState extends ConsumerState<EditItemScreen> {
                   _isDirty ? Icons.local_laundry_service_rounded : Icons.checkroom_rounded,
                   color: _isDirty ? Colors.orangeAccent : Colors.green,
                 ),
-                onChanged: (val) {
-                  setState(() {
-                    _isDirty = val;
-                  });
+                onChanged: (val) async {
+                  final newVal = val;
+                  setState(() => _isDirty = newVal);
+                  try {
+                    await ApiService().setLaundryStatus(
+                      widget.initialItem['id'] as int,
+                      isDirty: newVal,
+                    );
+                  } catch (_) {
+                    // revert on failure
+                    if (mounted) setState(() => _isDirty = !newVal);
+                  }
                 },
               ),
             ),
