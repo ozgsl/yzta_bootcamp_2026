@@ -78,19 +78,56 @@ class _AddItemScreenState extends ConsumerState<AddItemScreen> {
           _aiAnalysis = analysis;
 
           if (analysis != null) {
-            // Kıyafet türü — case-insensitive eşleştirme
-            final turRaw = (analysis['tur'] as String? ?? '');
-            final matchedTur = _turler.firstWhere(
-              (t) => t.toLowerCase() == turRaw.toLowerCase(),
-              orElse: () => '',
-            );
+            // 1. Kıyafet Türü (Type) Matching
+            final turRaw = (analysis['tur'] as String? ?? '').trim().toLowerCase();
+            String matchedTur = '';
+            
+            if (turRaw == 'tişört' || turRaw == 't-shirt' || turRaw == 'tshirt') {
+              matchedTur = 'Tişört';
+            } else if (turRaw == 'gömlek' || turRaw == 'shirt') {
+              matchedTur = 'Gömlek';
+            } else if (turRaw == 'bluz' || turRaw == 'blouse') {
+              matchedTur = 'Bluz';
+            } else if (turRaw == 'kazak' || turRaw == 'sweater' || turRaw == 'hırka' || turRaw == 'cardigan') {
+              matchedTur = 'Kazak';
+            } else if (turRaw == 'sweatshirt' || turRaw == 'hoodie') {
+              matchedTur = 'Sweatshirt';
+            } else if (turRaw == 'pantolon' || turRaw == 'jean' || turRaw == 'jeans' || turRaw == 'trousers' || turRaw == 'eşofman altı' || turRaw == 'tayt' || turRaw == 'leggings' || turRaw == 'sweatpants') {
+              matchedTur = 'Pantolon';
+            } else if (turRaw == 'şort' || turRaw == 'shorts') {
+              matchedTur = 'Şort';
+            } else if (turRaw == 'etek' || turRaw == 'skirt') {
+              matchedTur = 'Etek';
+            } else if (turRaw == 'elbise' || turRaw == 'dress' || turRaw == 'tulum' || turRaw == 'jumpsuit') {
+              matchedTur = 'Elbise';
+            } else if (turRaw == 'ceket' || turRaw == 'jacket' || turRaw == 'blazer' || turRaw == 'yelek' || turRaw == 'vest') {
+              matchedTur = 'Ceket';
+            } else if (turRaw == 'mont' || turRaw == 'coat' || turRaw == 'kaban' || turRaw == 'parka') {
+              matchedTur = 'Mont';
+            } else if (turRaw == 'sneaker' || turRaw == 'sneakers' || turRaw == 'spor ayakkabı') {
+              matchedTur = 'Sneaker';
+            } else if (turRaw == 'bot' || turRaw == 'boots') {
+              matchedTur = 'Bot';
+            } else if (turRaw == 'ayakkabı' || turRaw == 'topuklu ayakkabı' || turRaw == 'heels' || turRaw == 'loafer' || turRaw == 'loafers' || turRaw == 'sandalet' || turRaw == 'sandals') {
+              matchedTur = 'Ayakkabı';
+            } else if (turRaw == 'çanta' || turRaw == 'bag' || turRaw == 'backpack' || turRaw == 'handbag' || turRaw == 'sırt çantası' || turRaw == 'el çantası') {
+              matchedTur = 'Çanta';
+            } else if (turRaw == 'aksesuar' || turRaw == 'accessory' || turRaw == 'şapka' || turRaw == 'hat' || turRaw == 'bere' || turRaw == 'beanie' || turRaw == 'eşarp' || turRaw == 'scarf' || turRaw == 'kemer' || turRaw == 'belt' || turRaw == 'kravat' || turRaw == 'tie') {
+              matchedTur = 'Aksesuar';
+            } else {
+              matchedTur = _turler.firstWhere(
+                (t) => t.toLowerCase() == turRaw || turRaw.contains(t.toLowerCase()) || t.toLowerCase().contains(turRaw),
+                orElse: () => '',
+              );
+            }
             if (matchedTur.isNotEmpty) _tur = matchedTur;
 
-            // Renk
-            final renkRaw = (analysis['renk'] as String? ?? '');
+            // 2. Renk (Color) Matching
+            final renkRaw = (analysis['renk'] as String? ?? '').trim().toLowerCase();
             if (renkRaw.isNotEmpty) {
               for (var mc in clothingColors) {
-                if (mc.name.toLowerCase() == renkRaw.toLowerCase()) {
+                final mcName = mc.name.toLowerCase();
+                if (mcName == renkRaw || renkRaw.contains(mcName) || mcName.contains(renkRaw)) {
                   _selectedColor = SelectedColor(
                     name: mc.name,
                     hexCode: mc.primaryHex,
@@ -99,7 +136,8 @@ class _AddItemScreenState extends ConsumerState<AddItemScreen> {
                   break;
                 }
                 for (var sc in mc.subColors) {
-                  if (sc.name.toLowerCase() == renkRaw.toLowerCase()) {
+                  final scName = sc.name.toLowerCase();
+                  if (scName == renkRaw || renkRaw.contains(scName) || scName.contains(renkRaw)) {
                     _selectedColor = SelectedColor(
                       name: sc.name,
                       hexCode: sc.hex,
@@ -111,12 +149,25 @@ class _AddItemScreenState extends ConsumerState<AddItemScreen> {
               }
             }
 
-            // Mevsim
-            final mevsimRaw = (analysis['mevsim'] as String? ?? '');
-            final matchedMevsim = _mevsimler.firstWhere(
-              (m) => m.toLowerCase() == mevsimRaw.toLowerCase(),
-              orElse: () => '',
-            );
+            // 3. Mevsim (Season) Matching
+            final mevsimRaw = (analysis['mevsim'] as String? ?? '').trim().toLowerCase();
+            String matchedMevsim = '';
+            if (mevsimRaw.contains('yaz') || mevsimRaw == 'summer') {
+              matchedMevsim = 'Yaz';
+            } else if (mevsimRaw.contains('kış') || mevsimRaw.contains('kis') || mevsimRaw == 'winter') {
+              matchedMevsim = 'Kış';
+            } else if (mevsimRaw.contains('ilkbahar') || mevsimRaw == 'spring') {
+              matchedMevsim = 'İlkbahar';
+            } else if (mevsimRaw.contains('sonbahar') || mevsimRaw == 'autumn') {
+              matchedMevsim = 'Sonbahar';
+            } else if (mevsimRaw.contains('tüm') || mevsimRaw.contains('tum') || mevsimRaw.contains('all')) {
+              matchedMevsim = 'Tüm Sezon';
+            } else {
+              matchedMevsim = _mevsimler.firstWhere(
+                (m) => m.toLowerCase() == mevsimRaw,
+                orElse: () => '',
+              );
+            }
             if (matchedMevsim.isNotEmpty) _mevsim = matchedMevsim;
           }
         });
