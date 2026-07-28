@@ -20,6 +20,7 @@ class EditProfileScreen extends ConsumerStatefulWidget {
 class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
   final _displayNameController = TextEditingController();
   final _bioController = TextEditingController();
+  final _locationController = TextEditingController();
   final _avatarUrlController = TextEditingController();
   final _picker = ImagePicker();
   File? _selectedImage;
@@ -32,6 +33,7 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
     if (user != null) {
       _displayNameController.text = user.displayName;
       _bioController.text = user.bio;
+      _locationController.text = user.location;
       _avatarUrlController.text = user.avatarUrl;
     }
   }
@@ -73,6 +75,7 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
         userId: userId,
         displayName: _displayNameController.text,
         bio: _bioController.text,
+        location: _locationController.text,
         avatarUrl: avatarUrl,
       );
 
@@ -181,6 +184,26 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
                       Colors.white),
               decoration: InputDecoration(
                 labelText: s.isTr ? 'Görünen Ad' : 'Display Name',
+                labelStyle: TextStyle(
+                    color: Theme.of(context).textTheme.bodySmall?.color ??
+                        Colors.grey),
+                enabledBorder: UnderlineInputBorder(
+                    borderSide:
+                        BorderSide(color: Theme.of(context).dividerColor)),
+                focusedBorder: UnderlineInputBorder(
+                    borderSide: BorderSide(
+                        color: Theme.of(context).colorScheme.primary)),
+              ),
+            ),
+            const SizedBox(height: 24),
+            TextField(
+              controller: _locationController,
+              style: TextStyle(
+                  color: Theme.of(context).textTheme.bodyLarge?.color ??
+                      Colors.white),
+              decoration: InputDecoration(
+                labelText: s.isTr ? 'Konum / Şehir (Hava Durumu İçin)' : 'Location / City (For Weather)',
+                hintText: s.isTr ? 'Örn: İstanbul, Ankara, İzmir...' : 'e.g. Istanbul, London...',
                 labelStyle: TextStyle(
                     color: Theme.of(context).textTheme.bodySmall?.color ??
                         Colors.grey),

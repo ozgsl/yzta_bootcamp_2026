@@ -17,7 +17,8 @@ import '../../../notifications/presentation/screens/notifications_screen.dart';
 import '../../../../services/weather_service.dart';
 
 final weatherProvider = FutureProvider<WeatherInfo?>((ref) async {
-  return await WeatherService().getDashboardWeather();
+  final user = ref.watch(profileProvider).user;
+  return await WeatherService().getDashboardWeather(manualLocation: user?.location);
 });
 
 class DashboardScreen extends ConsumerWidget {
@@ -180,49 +181,90 @@ class DashboardScreen extends ConsumerWidget {
                       }
 
                       return Container(
-                        padding: EdgeInsets.all(20),
+                        padding: const EdgeInsets.all(20),
                         decoration: BoxDecoration(
                           color: Theme.of(context).cardColor,
                           borderRadius: BorderRadius.circular(16),
+                          border: Border.all(
+                            color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.2),
+                          ),
                         ),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
-                                Icon(weatherIcon, color: Theme.of(context).textTheme.bodyLarge?.color ?? Colors.white, size: 28),
-                                SizedBox(width: 16),
-                                Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                Row(
                                   children: [
-                                    Text(
-                                      '${weather.temp.round()}°C',
-                                      style: TextStyle(
-                                        color: Theme.of(context).textTheme.bodyLarge?.color ?? Colors.white,
-                                        fontSize: 24,
-                                        fontWeight: FontWeight.w700,
-                                      ),
-                                    ),
-                                    Text(
-                                      weather.description,
-                                      style: TextStyle(
-                                        color:
-                                            Theme.of(context).textTheme.bodySmall?.color ??
-                                                Colors.grey,
-                                        fontSize: 12,
-                                      ),
+                                    Icon(weatherIcon, color: Theme.of(context).colorScheme.primary, size: 32),
+                                    const SizedBox(width: 14),
+                                    Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          '${weather.temp.round()}°C',
+                                          style: TextStyle(
+                                            color: Theme.of(context).textTheme.bodyLarge?.color ?? Colors.white,
+                                            fontSize: 24,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
+                                        Text(
+                                          weather.description,
+                                          style: TextStyle(
+                                            color: Theme.of(context).textTheme.bodySmall?.color ?? Colors.grey,
+                                            fontSize: 12,
+                                          ),
+                                        ),
+                                      ],
                                     ),
                                   ],
                                 ),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                  decoration: BoxDecoration(
+                                    color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.12),
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      Icon(Icons.location_on_rounded, size: 14, color: Theme.of(context).colorScheme.primary),
+                                      const SizedBox(width: 4),
+                                      Text(
+                                        weather.cityName,
+                                        style: TextStyle(
+                                          color: Theme.of(context).colorScheme.primary,
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
                               ],
                             ),
-                            SizedBox(height: 12),
-                            Text(
-                              weather.recommendation,
-                              style: TextStyle(
-                                color: Theme.of(context).colorScheme.primary,
-                                fontSize: 13,
-                                fontWeight: FontWeight.w500,
+                            const SizedBox(height: 14),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                              decoration: BoxDecoration(
+                                color: Theme.of(context).colorScheme.surface,
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Row(
+                                children: [
+                                  Expanded(
+                                    child: Text(
+                                      weather.recommendation,
+                                      style: TextStyle(
+                                        color: Theme.of(context).textTheme.bodyLarge?.color,
+                                        fontSize: 12.5,
+                                        fontWeight: FontWeight.w500,
+                                        height: 1.3,
+                                      ),
+                                    ),
+                                  ),
+                                ],
                               ),
                             ),
                           ],
