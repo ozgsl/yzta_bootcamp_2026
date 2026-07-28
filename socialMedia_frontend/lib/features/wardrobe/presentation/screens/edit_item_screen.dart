@@ -36,32 +36,39 @@ class _EditItemScreenState extends ConsumerState<EditItemScreen> {
   final _markaCtrl = TextEditingController();
   final _bedenCtrl = TextEditingController();
 
-  final List<String> _turler = [
-    'Üst Giyim',
-    'Alt Giyim',
-    'Dış Giyim',
+  static const _turler = [
+    'Tişört',
+    'Gömlek',
+    'Bluz',
+    'Kazak',
+    'Sweatshirt',
+    'Pantolon',
+    'Şort',
+    'Etek',
     'Elbise',
+    'Ceket',
+    'Mont',
+    'Kaban',
     'Ayakkabı',
+    'Bot',
+    'Sneaker',
+    'Çanta',
     'Aksesuar',
-    'Çanta'
+    'Diğer',
   ];
-  final List<String> _mevsimler = [
-    'İlkbahar',
-    'Yaz',
-    'Sonbahar',
-    'Kış',
-    'Tüm Sezon'
-  ];
+
+  static const _mevsimler = ['Yaz', 'Kış', 'İlkbahar', 'Sonbahar', 'Tüm Sezon'];
 
   @override
   void initState() {
     super.initState();
-    _tur = _ensureValidDropdownValue(widget.initialItem['tur'], _turler);
-    
+    final rawTur = widget.initialItem['tur']?.toString() ?? '';
+    _tur = _matchInitialValue(rawTur, _turler);
+
     final renk = widget.initialItem['renk'] as String?;
     final renkHex = widget.initialItem['renk_hex'] as String?;
     final renkCatId = widget.initialItem['renk_kategori_id'] as String?;
-    if (renk != null) {
+    if (renk != null && renk.isNotEmpty) {
       _selectedColor = SelectedColor(
         name: renk,
         hexCode: renkHex ?? '#000000',
@@ -69,19 +76,51 @@ class _EditItemScreenState extends ConsumerState<EditItemScreen> {
       );
     }
 
-    _mevsim =
-        _ensureValidDropdownValue(widget.initialItem['mevsim'], _mevsimler);
+    final rawMevsim = widget.initialItem['mevsim']?.toString() ?? '';
+    _mevsim = _matchInitialValue(rawMevsim, _mevsimler);
 
     _markaCtrl.text = widget.initialItem['marka'] ?? '';
     _bedenCtrl.text = widget.initialItem['beden'] ?? '';
 
     _isFavorite = widget.initialItem['is_favorite'] == 1 || widget.initialItem['is_favorite'] == true;
-    _isDirty = widget.initialItem['is_dirty'] == 1 || widget.initialItem['is_dirty'] == true;
+    _isDirty = widget.initialItem['temiz'] == 0 || widget.initialItem['temiz'] == false || widget.initialItem['is_dirty'] == 1 || widget.initialItem['is_dirty'] == true;
   }
 
-  String _ensureValidDropdownValue(dynamic val, List<String> items) {
-    if (val == null || !items.contains(val)) return items.first;
-    return val as String;
+  String _matchInitialValue(String raw, List<String> items) {
+    if (raw.isEmpty) return items.first;
+    final r = raw.trim().toLowerCase();
+
+    for (var item in items) {
+      if (item.toLowerCase() == r) return item;
+    }
+
+    if (r == 'tişört' || r == 't-shirt' || r == 'tshirt') return 'Tişört';
+    if (r == 'gömlek' || r == 'shirt') return 'Gömlek';
+    if (r == 'bluz' || r == 'blouse') return 'Bluz';
+    if (r == 'kazak' || r == 'sweater' || r == 'hırka' || r == 'cardigan') return 'Kazak';
+    if (r == 'sweatshirt' || r == 'hoodie') return 'Sweatshirt';
+    if (r == 'pantolon' || r == 'jean' || r == 'jeans' || r == 'trousers' || r == 'eşofman altı' || r == 'tayt' || r == 'alt giyim') return 'Pantolon';
+    if (r == 'şort' || r == 'shorts') return 'Şort';
+    if (r == 'etek' || r == 'skirt') return 'Etek';
+    if (r == 'elbise' || r == 'dress' || r == 'tulum' || r == 'jumpsuit') return 'Elbise';
+    if (r == 'ceket' || r == 'jacket' || r == 'blazer' || r == 'yelek' || r == 'dış giyim') return 'Ceket';
+    if (r == 'mont' || r == 'coat' || r == 'kaban' || r == 'parka') return 'Mont';
+    if (r == 'sneaker' || r == 'sneakers' || r == 'spor ayakkabı') return 'Sneaker';
+    if (r == 'bot' || r == 'boots') return 'Bot';
+    if (r == 'ayakkabı' || r == 'topuklu ayakkabı' || r == 'heels' || r == 'loafer' || r == 'sandalet') return 'Ayakkabı';
+    if (r == 'çanta' || r == 'bag' || r == 'backpack' || r == 'handbag') return 'Çanta';
+    if (r == 'aksesuar' || r == 'accessory' || r == 'şapka' || r == 'bere' || r == 'eşarp' || r == 'kemer' || r == 'kravat') return 'Aksesuar';
+
+    if (r.contains('yaz') || r == 'summer') return 'Yaz';
+    if (r.contains('kış') || r.contains('kis') || r == 'winter') return 'Kış';
+    if (r.contains('ilkbahar') || r == 'spring') return 'İlkbahar';
+    if (r.contains('sonbahar') || r == 'autumn') return 'Sonbahar';
+    if (r.contains('tüm') || r.contains('tum') || r.contains('all')) return 'Tüm Sezon';
+
+    return items.firstWhere(
+      (item) => item.toLowerCase().contains(r) || r.contains(item.toLowerCase()),
+      orElse: () => items.first,
+    );
   }
 
   Future<void> _pickImage(ImageSource source) async {
@@ -117,28 +156,28 @@ class _EditItemScreenState extends ConsumerState<EditItemScreen> {
       }
 
       await ApiService().updateCloth(widget.initialItem['id'], {
-        'tur': _tur,
+        'tur': _tur.toLowerCase(),
         'renk': _selectedColor?.name ?? 'Belirsiz',
         'renk_hex': _selectedColor?.hexCode,
         'renk_kategori_id': _selectedColor?.parentCategoryId,
         'marka': _markaCtrl.text.isEmpty ? null : _markaCtrl.text,
         'beden': _bedenCtrl.text.isEmpty ? null : _bedenCtrl.text,
-        'mevsim': _mevsim,
+        'mevsim': _mevsim.toLowerCase(),
+        'temiz': !_isDirty,
         'foto_url': imageUrl,
         'is_favorite': _isFavorite,
-        'is_dirty': _isDirty,
       });
 
       if (mounted) {
         Navigator.pop(context, true);
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Clothing updated!')),
+          const SnackBar(content: Text('✅ Kıyafet güncellendi!')),
         );
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e')),
+          SnackBar(content: Text('Hata: $e')),
         );
       }
     } finally {
@@ -182,13 +221,13 @@ class _EditItemScreenState extends ConsumerState<EditItemScreen> {
         if (mounted) {
           Navigator.pop(context, true);
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Clothing deleted.')),
+            const SnackBar(content: Text('Kıyafet silindi.')),
           );
         }
       } catch (e) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Error during deletion: $e')),
+            SnackBar(content: Text('Silme hatası: $e')),
           );
         }
       } finally {
@@ -201,10 +240,23 @@ class _EditItemScreenState extends ConsumerState<EditItemScreen> {
     showModalBottomSheet(
       context: context,
       backgroundColor: Theme.of(context).cardColor,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
       builder: (_) => SafeArea(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
+            const SizedBox(height: 8),
+            Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: Theme.of(context).textTheme.bodySmall?.color ?? Colors.grey,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            const SizedBox(height: 16),
             ListTile(
               leading: Icon(Icons.camera_alt_rounded,
                   color: Theme.of(context).colorScheme.primary),
@@ -229,6 +281,7 @@ class _EditItemScreenState extends ConsumerState<EditItemScreen> {
                 _pickImage(ImageSource.gallery);
               },
             ),
+            const SizedBox(height: 8),
           ],
         ),
       ),
@@ -240,6 +293,7 @@ class _EditItemScreenState extends ConsumerState<EditItemScreen> {
     final s = ref.watch(stringsProvider);
     final rawFotoUrl = widget.initialItem['foto_url']?.toString() ?? widget.initialItem['image_url']?.toString() ?? '';
     final fotoUrl = rawFotoUrl.isNotEmpty ? ApiService.fixImageUrl(rawFotoUrl) : null;
+
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
@@ -250,8 +304,7 @@ class _EditItemScreenState extends ConsumerState<EditItemScreen> {
         backgroundColor: Theme.of(context).scaffoldBackgroundColor,
         elevation: 0,
         iconTheme: IconThemeData(
-            color:
-                Theme.of(context).textTheme.bodyLarge?.color ?? Colors.white),
+            color: Theme.of(context).textTheme.bodyLarge?.color ?? Colors.white),
         actions: [
           IconButton(
             icon: Icon(
@@ -266,7 +319,7 @@ class _EditItemScreenState extends ConsumerState<EditItemScreen> {
           ),
           _isLoading
               ? Padding(
-                  padding: EdgeInsets.all(16),
+                  padding: const EdgeInsets.all(16),
                   child: SizedBox(
                     width: 20,
                     height: 20,
@@ -289,6 +342,7 @@ class _EditItemScreenState extends ConsumerState<EditItemScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // ── Fotoğraf Seçimi ─────────────────────────
             GestureDetector(
               onTap: _showImageSourceSheet,
               child: Container(
@@ -329,14 +383,21 @@ class _EditItemScreenState extends ConsumerState<EditItemScreen> {
                           ),
               ),
             ),
+
             const SizedBox(height: 24),
+
+            // ── Kategori ────────────────────────────────
             const _SectionLabel(text: 'Type *'),
-            _ChipsField(
-                value: _tur,
-                items: _turler,
-                onChanged: (v) => setState(() => _tur = v),
-                displayTranslator: (val) => s.translateWardrobe(val)),
+            _DropdownField(
+              value: _tur,
+              items: _turler,
+              onChanged: (v) => setState(() => _tur = v!),
+              displayTranslator: (val) => s.translateWardrobe(val),
+            ),
+
             const SizedBox(height: 16),
+
+            // ── Renk ────────────────────────────────────
             const _SectionLabel(text: 'Color *'),
             ClothingColorPicker(
               initialColor: _selectedColor,
@@ -344,34 +405,34 @@ class _EditItemScreenState extends ConsumerState<EditItemScreen> {
                 setState(() => _selectedColor = color);
               },
             ),
+
             const SizedBox(height: 16),
+
+            // ── Mevsim ──────────────────────────────────
             const _SectionLabel(text: 'Season'),
-            _ChipsField(
-                value: _mevsim,
-                items: _mevsimler,
-                onChanged: (v) => setState(() => _mevsim = v),
-                displayTranslator: (val) => s.translateWardrobe(val)),
-            const SizedBox(height: 16),
-            const _SectionLabel(text: 'Brand'),
-            TextField(
-              controller: _markaCtrl,
-              style: TextStyle(
-                  color: Theme.of(context).textTheme.bodyLarge?.color ??
-                      Colors.white),
-              decoration: _inputDeco('Enter brand'),
+            _DropdownField(
+              value: _mevsim,
+              items: _mevsimler,
+              onChanged: (v) => setState(() => _mevsim = v!),
+              displayTranslator: (val) => s.translateWardrobe(val),
             ),
+
             const SizedBox(height: 16),
-            const _SectionLabel(text: 'Size'),
-            TextField(
-              controller: _bedenCtrl,
-              style: TextStyle(
-                  color: Theme.of(context).textTheme.bodyLarge?.color ??
-                      Colors.white),
-              decoration: _inputDeco('Size (e.g. M, 38)'),
-            ),
-            const SizedBox(height: 32),
-            
-            // Laundry Basket / Clean Toggle
+
+            // ── Marka ───────────────────────────────────
+            const _SectionLabel(text: 'Brand (optional)'),
+            _TextField(controller: _markaCtrl, hint: 'Nike, Zara, H&M...'),
+
+            const SizedBox(height: 16),
+
+            // ── Beden ───────────────────────────────────
+            const _SectionLabel(text: 'Size (optional)'),
+            _TextField(
+                controller: _bedenCtrl, hint: 'XS, S, M, L, XL, 36, 38...'),
+
+            const SizedBox(height: 24),
+
+            // ── Kirli Sepeti Toggle ──────────────────────
             Container(
               width: double.infinity,
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -408,44 +469,39 @@ class _EditItemScreenState extends ConsumerState<EditItemScreen> {
             ),
 
             const SizedBox(height: 32),
-            
-            // Delete Button
+
+            // ── Sil Butonu ──────────────────────────────
             SizedBox(
               width: double.infinity,
               height: 50,
               child: OutlinedButton.icon(
                 onPressed: _isDeleting ? null : _deleteItem,
-                icon: _isDeleting 
-                    ? SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Theme.of(context).colorScheme.error, strokeWidth: 2)) 
-                    : Icon(Icons.delete_outline_rounded, color: Theme.of(context).colorScheme.error),
+                icon: _isDeleting
+                    ? SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                            color: Theme.of(context).colorScheme.error,
+                            strokeWidth: 2))
+                    : Icon(Icons.delete_outline_rounded,
+                        color: Theme.of(context).colorScheme.error),
                 label: Text(
                   'Kıyafeti Sil',
-                  style: TextStyle(color: Theme.of(context).colorScheme.error, fontWeight: FontWeight.bold),
+                  style: TextStyle(
+                      color: Theme.of(context).colorScheme.error,
+                      fontWeight: FontWeight.bold),
                 ),
                 style: OutlinedButton.styleFrom(
                   side: BorderSide(color: Theme.of(context).colorScheme.error),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12)),
                 ),
               ),
             ),
+
             const SizedBox(height: 40),
           ],
         ),
-      ),
-    );
-  }
-
-  InputDecoration _inputDeco(String hint) {
-    return InputDecoration(
-      hintText: hint,
-      hintStyle: TextStyle(
-          color: Theme.of(context).textTheme.bodySmall?.color ?? Colors.grey),
-      filled: true,
-      fillColor: Theme.of(context).colorScheme.surface,
-      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-      border: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
-        borderSide: BorderSide.none,
       ),
     );
   }
@@ -454,26 +510,27 @@ class _EditItemScreenState extends ConsumerState<EditItemScreen> {
 class _SectionLabel extends StatelessWidget {
   final String text;
   const _SectionLabel({required this.text});
+
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 8, left: 4),
+      padding: const EdgeInsets.only(bottom: 8),
       child: Text(text,
           style: TextStyle(
-              color:
-                  Theme.of(context).textTheme.bodyLarge?.color ?? Colors.white,
-              fontWeight: FontWeight.bold)),
+              color: Theme.of(context).textTheme.bodyMedium?.color ?? Colors.grey,
+              fontSize: 13,
+              fontWeight: FontWeight.w500)),
     );
   }
 }
 
-class _ChipsField extends StatelessWidget {
+class _DropdownField extends StatelessWidget {
   final String value;
   final List<String> items;
-  final void Function(String) onChanged;
+  final void Function(String?) onChanged;
   final String Function(String)? displayTranslator;
 
-  const _ChipsField({
+  const _DropdownField({
     required this.value,
     required this.items,
     required this.onChanged,
@@ -482,36 +539,63 @@ class _ChipsField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Wrap(
-      spacing: 8,
-      runSpacing: 8,
-      children: items.map((item) {
-        final isSelected = item == value;
-        return GestureDetector(
-          onTap: () => onChanged(item),
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            decoration: BoxDecoration(
-              color: isSelected
-                  ? Theme.of(context).colorScheme.primary
-                  : Theme.of(context).colorScheme.surface,
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: Text(
-              displayTranslator != null ? displayTranslator!(item) : item,
-              style: TextStyle(
-                color: isSelected
-                    ? Theme.of(context).textTheme.bodyLarge?.color ??
-                        Colors.white
-                    : Theme.of(context).textTheme.bodyLarge?.color ??
-                        Colors.white,
-                fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                fontSize: 13,
-              ),
-            ),
-          ),
-        );
-      }).toList(),
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surface,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: DropdownButton<String>(
+        value: value,
+        isExpanded: true,
+        underline: const SizedBox(),
+        dropdownColor: Theme.of(context).cardColor,
+        style: TextStyle(
+            color: Theme.of(context).textTheme.bodyLarge?.color ?? Colors.white,
+            fontSize: 15),
+        items: items
+            .map((e) => DropdownMenuItem(
+                value: e,
+                child: Text(
+                    displayTranslator != null ? displayTranslator!(e) : e)))
+            .toList(),
+        onChanged: onChanged,
+      ),
+    );
+  }
+}
+
+class _TextField extends StatelessWidget {
+  final TextEditingController controller;
+  final String hint;
+
+  const _TextField({required this.controller, required this.hint});
+
+  @override
+  Widget build(BuildContext context) {
+    return TextField(
+      controller: controller,
+      style: TextStyle(
+          color: Theme.of(context).textTheme.bodyLarge?.color ?? Colors.white),
+      decoration: InputDecoration(
+        hintText: hint,
+        hintStyle: TextStyle(
+            color: Theme.of(context).textTheme.bodySmall?.color ?? Colors.grey),
+        filled: true,
+        fillColor: Theme.of(context).colorScheme.surface,
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(color: Theme.of(context).dividerColor),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(color: Theme.of(context).dividerColor),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(color: Theme.of(context).colorScheme.primary),
+        ),
+      ),
     );
   }
 }
