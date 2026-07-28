@@ -298,17 +298,22 @@ class _EditItemScreenState extends ConsumerState<EditItemScreen> {
     final rawFotoUrl = widget.initialItem['foto_url']?.toString() ?? widget.initialItem['image_url']?.toString() ?? '';
     final fotoUrl = rawFotoUrl.isNotEmpty ? ApiService.fixImageUrl(rawFotoUrl) : null;
 
-    return Scaffold(
-      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-      appBar: AppBar(
-        title: Text(s.isTr ? 'Kıyafeti Düzenle' : 'Edit Clothing',
-            style: TextStyle(
-                color: Theme.of(context).textTheme.bodyLarge?.color ??
-                    Colors.white)),
+    return PopScope(
+      canPop: false,
+      onPopInvoked: (didPop) {
+        if (!didPop) Navigator.pop(context, true);
+      },
+      child: Scaffold(
         backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-        elevation: 0,
-        iconTheme: IconThemeData(
-            color: Theme.of(context).textTheme.bodyLarge?.color ?? Colors.white),
+        appBar: AppBar(
+          title: Text(s.isTr ? 'Kıyafeti Düzenle' : 'Edit Clothing',
+              style: TextStyle(
+                  color: Theme.of(context).textTheme.bodyLarge?.color ??
+                      Colors.white)),
+          backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+          elevation: 0,
+          iconTheme: IconThemeData(
+              color: Theme.of(context).textTheme.bodyLarge?.color ?? Colors.white),
         actions: [
           IconButton(
             icon: Icon(
@@ -323,9 +328,13 @@ class _EditItemScreenState extends ConsumerState<EditItemScreen> {
                   widget.initialItem['id'] as int,
                   isFavorite: newVal,
                 );
-              } catch (_) {
-                // revert on failure
-                if (mounted) setState(() => _isFavorite = !newVal);
+              } catch (e) {
+                if (mounted) {
+                  setState(() => _isFavorite = !newVal);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Failed to save: $e')),
+                  );
+                }
               }
             },
           ),
@@ -482,9 +491,13 @@ class _EditItemScreenState extends ConsumerState<EditItemScreen> {
                       widget.initialItem['id'] as int,
                       isDirty: newVal,
                     );
-                  } catch (_) {
-                    // revert on failure
-                    if (mounted) setState(() => _isDirty = !newVal);
+                  } catch (e) {
+                    if (mounted) {
+                      setState(() => _isDirty = !newVal);
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('Failed to save: $e')),
+                      );
+                    }
                   }
                 },
               ),
@@ -525,7 +538,8 @@ class _EditItemScreenState extends ConsumerState<EditItemScreen> {
           ],
         ),
       ),
-    );
+    ), // end PopScope child: Scaffold
+    ); // end PopScope
   }
 }
 
