@@ -23,30 +23,31 @@ STATIC_DIR.mkdir(exist_ok=True)
 
 async def _warmup_ollama_models():
     """
-    Backend başladıktan sonra arka planda LLaVA ve llama3.2'yi belleğe yükler.
-    keep_alive=10m ile model 10 dakika bellekte kalır — sonraki istekler hızlı olur.
+    Backend başladıktan sonra arka planda Moondream2 ve llama3.2'yi belleğe yükler.
+    keep_alive=10m → model 10 dakika bellekte kalır — sonraki istekler hızlı olur.
     """
     import asyncio
     import httpx
 
-    await asyncio.sleep(4)  # Backend tamamen başlayana kadar bekle
+    await asyncio.sleep(4)  # Backend tamamen başlamayana kadar bekle
 
     async with httpx.AsyncClient(timeout=120.0) as client:
-        # LLaVA warm-up
+        # Moondream2 warm-up — sadece modeli RAM'e yükle (görüntüsüz)
+        # NOT: keep_alive kullanmıyoruz — görüntülü isteklerde context cache sorununa yol açıyordu
         try:
             await client.post(
                 f"{OLLAMA_BASE_URL}/api/generate",
                 json={
                     "model": OLLAMA_VISION_MODEL,
-                    "prompt": "Hi",
+                    "prompt": "hi",
                     "stream": False,
-                    "keep_alive": "10m",
+                    "keep_alive": "0",   # Context cache'ini sıfırla
                     "options": {"num_predict": 1},
                 },
             )
-            print(f"[Warm-up] ✅ LLaVA ({OLLAMA_VISION_MODEL}) belleğe yüklendi.")
+            print(f"[Warm-up] ✅ Moondream2 ({OLLAMA_VISION_MODEL}) belleğe yüklendi.")
         except Exception as e:
-            print(f"[Warm-up] ⚠️ LLaVA yüklenemedi: {e}")
+            print(f"[Warm-up] ⚠️ Moondream2 yüklenemedi: {e}")
 
         # llama3.2 warm-up
         try:

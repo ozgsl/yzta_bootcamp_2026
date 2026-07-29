@@ -481,7 +481,7 @@ class _CreatePostScreenState extends ConsumerState<CreatePostScreen> {
                       ? 'Kıyafetler analiz ediliyor...'
                       : 'Öneri alınıyor...')
                   : (provider.selectedImage != null
-                      ? 'Kombini Analiz Et (LLaVA + AI)'
+                      ? 'Kombini Analiz Et (Moondream + AI)'
                       : 'AI Öneri Al'),
             ),
             style: OutlinedButton.styleFrom(

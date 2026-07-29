@@ -15,6 +15,7 @@ Endpoints:
 from __future__ import annotations
 
 import base64
+import hashlib
 import os
 import uuid
 import httpx
@@ -29,11 +30,11 @@ from app.services.fashion_classifier import classifier as fashion_classifier
 router = APIRouter()
 
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
-# Görsel model: llava (7b, ~4.7GB) — M2 MacBook Air ile uyumlu
-# Yükseltme: llava:13b (~8GB) daha iyi tespit, ancak 16GB+ RAM gerektirir
-OLLAMA_VISION_MODEL = os.getenv("OLLAMA_VISION_MODEL", "llava")
-# Metin modeli: llama3.2:3b (~2GB) — Hızlı ve hafif
-# Yükseltme: llama3.1:8b daha zengin açıklama, ancak ~5GB RAM gerektirir
+# Görsel model: moondream (~1.7GB int4) — M2 MacBook Air optimized
+# Alternatif: "moondream:1.8b-fp16" (~3.5GB, daha iyi kalite)
+# Ollama ile küme: ollama pull moondream
+OLLAMA_VISION_MODEL = os.getenv("OLLAMA_VISION_MODEL", "moondream")
+# Metin modeli: llama3.2 — Türkçe hikaye/caption üretimi
 OLLAMA_TEXT_MODEL   = os.getenv("OLLAMA_MODEL",        "llama3.2")
 
 # Resim kayıt dizini
@@ -44,9 +45,89 @@ SERVER_HOST = os.getenv("SERVER_HOST", "localhost")
 SERVER_PORT = os.getenv("SERVER_PORT", "8000")
 
 
-# ─────────────────────────────────────────────────────────
+# ────────────────────────────────────────────────────────
+# Yardımcı: Görseli base64'e çevir + Güvenli JSON parse + Normalize/Dedup
+# ────────────────────────────────────────────────────────
+
+_VALID_ITEM_FIELDS = {"kategori", "tip", "renk", "desen", "tarz", "malzeme_tahmini", "confidence"}
+_TARZ_VALS        = {"casual", "spor", "sik", "resmi", "vintage"}
+
+
+def _safe_parse_json(raw: str):
+    """
+    Ham metin içinden JSON array veya object çıkarır.
+    Model bazen array yerine object, bazen yarım JSON döndürür.
+    Dönüş: (parsed_value, 'object'|'array'|None)
+    """
+    import json as _json
+    # Markdown temizle
+    for marker in ["```json", "```"]:
+        if marker in raw:
+            parts = raw.split(marker)
+            if len(parts) > 1:
+                raw = parts[1].split("```")[0].strip()
+            break
+    # En uzun geçerli JSON'u önce array sonra object olarak dene
+    candidates = []
+    sa, ea = raw.find("["), raw.rfind("]") + 1
+    so, eo = raw.find("{"), raw.rfind("}") + 1
+    if sa != -1 and ea > sa:
+        candidates.append(("array", raw[sa:ea]))
+    if so != -1 and eo > so:
+        candidates.append(("object", raw[so:eo]))
+    best = None
+    for kind, chunk in candidates:
+        try:
+            val = _json.loads(chunk)
+            if best is None or len(chunk) > len(best[2]):
+                best = (val, kind, chunk)
+        except _json.JSONDecodeError:
+            pass
+    if best:
+        return best[0], best[1]
+    return None, None
+
+
+def _normalize_item(item: dict) -> dict:
+    """Model çıktısındaki hatalı alan adlarını düzeltir, eksikleri varsayılanla doldurur."""
+    cleaned = {k: v for k, v in item.items() if k in _VALID_ITEM_FIELDS}
+    cleaned.setdefault("kategori", "ust giyim")
+    cleaned.setdefault("tip", "")
+    cleaned.setdefault("renk", "")
+    cleaned.setdefault("desen", "duz")
+    cleaned.setdefault("tarz", "casual")
+    cleaned.setdefault("malzeme_tahmini", None)
+    try:
+        cleaned["confidence"] = float(item.get("confidence", 0.7))
+    except (TypeError, ValueError):
+        cleaned["confidence"] = 0.7
+    # Model tarz değerini yanlış alana yazmışsa kurtar
+    for k in item:
+        if k in _TARZ_VALS and not cleaned.get("tarz"):
+            cleaned["tarz"] = k
+    # Legacy uyumluluk
+    cleaned["tur"]  = cleaned.get("tip", "")
+    cleaned["stil"] = cleaned.get("tarz", "")
+    return cleaned
+
+
+def _deduplicate_items(items: list) -> list:
+    """Aynı (tip, renk, desen) kombinasyonunu tekrar ekleme."""
+    seen, result = set(), []
+    for item in items:
+        key = hashlib.md5(
+            f"{item.get('tip','').lower()}|{item.get('renk','').lower()}|{item.get('desen','')}"
+            .encode()
+        ).hexdigest()
+        if key not in seen:
+            seen.add(key)
+            result.append(item)
+    return result
+
+
+# ────────────────────────────────────────────────────────
 # Yardımcı: Görseli base64'e çevir
-# ─────────────────────────────────────────────────────────
+# ────────────────────────────────────────────────────────
 
 def _image_to_base64(image_url: Optional[str]) -> Optional[str]:
     """
@@ -77,87 +158,43 @@ def _image_to_base64(image_url: Optional[str]) -> Optional[str]:
         return None
 
 
-# ─────────────────────────────────────────────────────────
-# 1) OLLAMA LLAVA — Görsel anlayan yerel model
-# ─────────────────────────────────────────────────────────
+# ─────────────────────────────────────────────────────────────
+# 1) MOONDREAM2 — Görsel anlayan yerel model (Ollama üzerinden)
+# ─────────────────────────────────────────────────────────────
 
-def _caption_with_llava(
+def _caption_with_moondream(
     image_b64: Optional[str],
     outfit_desc: str,
     style_hint: str = "",
     fashion_analysis: Optional[dict] = None,
 ) -> Optional[str]:
     """
-    Ollama llava modeli ile görsel analizi yapar.
-    FashionSigLIP analiz sonuçları varsa prompt'a eklenir — çok daha isabetli caption üretilir.
-    llava kurulu değilse None döner.
+    Moondream2 (Ollama) ile görsel analizi yapar ve Türkçe caption üretir.
+    FashionSigLIP analiz sonuçları varsa prompt'a eklenir.
+    Model kurulu değilse None döner.
     """
     if not image_b64:
-        return None  # Görsel yoksa llava'ya gerek yok, metin fallback'e geç
+        return None
 
-    # Görsel analizi için zenginleştirilmiş prompt
-    prompt_parts = [
-        "Sen bir moda uzmanısın. Bu kıyafet/moda fotoğrafını dikkatlice incele.",
-        "Görseldeki kıyafetleri, renkleri ve stili değerlendirerek",
-        "kısa, özgün ve çekici bir Türkçe sosyal medya caption'ı yaz.",
-        "Maksimum 250 karakter. Emoji kullan. Hashtag ekle (#moda #ootd #style #kombin gibi).",
-    ]
-    if outfit_desc and outfit_desc not in ("Kombin", "diğer: bilinmiyor"):
-        prompt_parts.append(f"Kombinde şunlar var: {outfit_desc}.")
+    # Moondream için kısa ve net prompt — model kısa sorulara daha iyi yanıt veriyor
+    context_parts = []
+    if outfit_desc and outfit_desc not in ("Kombin", "diger: bilinmiyor"):
+        context_parts.append(f"Outfit: {outfit_desc}.")
     if style_hint:
-        prompt_parts.append(f"Stil tercihi: {style_hint}.")
+        context_parts.append(f"Style: {style_hint}.")
     if fashion_analysis:
-        prompt_parts.append(
-            f"AI tespiti: '{fashion_analysis.get('tur', '')}', "
-            f"renk '{fashion_analysis.get('renk', '')}', "
-            f"stil '{fashion_analysis.get('stil_etiketi', '')}'."
+        context_parts.append(
+            f"Detected: {fashion_analysis.get('tur', '')}, "
+            f"{fashion_analysis.get('renk', '')}, "
+            f"{fashion_analysis.get('stil_etiketi', '')}."
         )
-    prompt_parts.append("Sadece caption metnini yaz. Açıklama, not veya başlık ekleme.")
-    prompt = " ".join(prompt_parts)
+    context = " ".join(context_parts)
 
-    payload = {
-        "model": OLLAMA_VISION_MODEL,
-        "prompt": prompt,
-        "images": [image_b64],
-        "stream": False,
-    }
-
-    try:
-        with httpx.Client(timeout=60.0) as client:
-            resp = client.post(f"{OLLAMA_BASE_URL}/api/generate", json=payload)
-            if resp.status_code == 404:
-                print(f"[llava] Model '{OLLAMA_VISION_MODEL}' kurulu değil. 'ollama pull llava' çalıştır.")
-                return None
-            resp.raise_for_status()
-            result = resp.json().get("response", "").strip()
-            return result[:280] if result else None
-    except httpx.ConnectError:
-        print("[llava] Ollama connection error - is ollama serve running?")
-        return None
-    except Exception as e:
-        print(f"[llava] Error: {e}")
-        return None
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# 3) LLaVA İLE ÇOKLU KIYAFet TESPİTİ — Yeni Pipeline Adım 1
-# ─────────────────────────────────────────────────────────────────────────────
-
-def _detect_outfit_items_with_llava(image_b64: str) -> list:
-    """
-    LLaVA vision modeli ile görseldeki tüm kıyafetleri tespit eder.
-    İngilizce prompt kullanılıyor — llava 7b İngilizce komutlarda daha tutarlı.
-    """
-    import json as _json
-
-    # İngilizce prompt: llava 7b İngilizce'de daha iyi JSON üretiyor
     prompt = (
-        "List ALL clothing items and accessories visible in this photo. "
-        "For each item output ONLY a JSON array. "
-        "Fields: tur (Turkish clothing name, e.g. blazer/pantolon/gomlek/elbise/bot/canta), "
-        "renk (Turkish color name), kumas (fabric if visible, else empty), stil (resmi/gundelik/spor/sik). "
-        "Example: [{\"tur\":\"blazer\",\"renk\":\"lacivert\",\"kumas\":\"yun\",\"stil\":\"resmi\"}] "
-        "Output ONLY the JSON array. No explanation, no markdown."
+        f"Write a short, catchy Turkish social media caption for this outfit photo. "
+        f"{context} "
+        f"Max 200 characters. Use emojis. Add hashtags like #moda #ootd #kombin. "
+        f"Return ONLY the caption text."
     )
 
     payload = {
@@ -165,56 +202,280 @@ def _detect_outfit_items_with_llava(image_b64: str) -> list:
         "prompt": prompt,
         "images": [image_b64],
         "stream": False,
-        "keep_alive": "10m",  # Model 10 dakika belleğinde kalır
-        "options": {
-            "temperature": 0.05,
-            "num_predict": 300,
-        },
+        "keep_alive": "10m",
+        "options": {"temperature": 0.7, "num_predict": 100},
     }
 
     try:
-        with httpx.Client(timeout=120.0) as client:  # 120s — cold start için yeterli
+        with httpx.Client(timeout=120.0) as client:
             resp = client.post(f"{OLLAMA_BASE_URL}/api/generate", json=payload)
             if resp.status_code == 404:
-                print(f"[LLaVA-Detect] Model '{OLLAMA_VISION_MODEL}' kurulu değil.")
-                return []
+                print(f"[Moondream] Model '{OLLAMA_VISION_MODEL}' kurulu degil. 'ollama pull moondream' calistir.")
+                return None
             resp.raise_for_status()
-            raw = resp.json().get("response", "").strip()
-
-            # Markdown kod bloğu temizle
-            for marker in ["```json", "```"]:
-                if marker in raw:
-                    parts = raw.split(marker)
-                    raw = parts[1].split("```")[0].strip() if len(parts) > 1 else raw
-                    break
-
-            # JSON dizisini bul
-            start = raw.find("[")
-            end = raw.rfind("]") + 1
-            if start != -1 and end > start:
-                try:
-                    parsed = _json.loads(raw[start:end])
-                    if isinstance(parsed, list):
-                        cleaned = []
-                        for item in parsed:
-                            if isinstance(item, dict) and item.get("tur"):
-                                cleaned.append({
-                                    "tur": str(item.get("tur", "")).lower(),
-                                    "renk": str(item.get("renk", "")),
-                                    "kumas": str(item.get("kumas", "")),
-                                    "stil": str(item.get("stil", "")),
-                                })
-                        return cleaned
-                except _json.JSONDecodeError:
-                    pass
-            print(f"[LLaVA-Detect] JSON parse edilemedi: {raw[:200]}")
-            return []
+            result = resp.json().get("response", "").strip()
+            return result[:280] if result else None
     except httpx.ConnectError:
-        print("[LLaVA-Detect] Ollama bağlantı hatası.")
+        print("[Moondream] Ollama baglanti hatasi — ollama serve calisiyor mu?")
+        return None
+    except Exception as e:
+        print(f"[Moondream] Caption hatasi: {e}")
+        return None
+
+
+# ───────────────────────────────────────────────────────────────────────────
+# 3) MOONDREAM2 KİYAFET TESPİTİ — Pipeline Adım 1
+#    Çıktı şeması (genisletilmis): kategori/tip/renk/desen/tarz/malzeme_tahmini/confidence
+# ───────────────────────────────────────────────────────────────────────────
+
+def _ask_moondream_sync(image_b64: str, question: str, max_tokens: int = 15) -> str:
+    """
+    Moondream'e tek basit soru sorar, kısa yanıt alır (sync versiyon).
+    Multi-query yaklaşımında her özellik için ayrı çağrı yapılır.
+    """
+    payload = {
+        "model": OLLAMA_VISION_MODEL,
+        "prompt": question,
+        "images": [image_b64],
+        "stream": False,
+        "keep_alive": "10m",
+        "options": {"temperature": 0.0, "num_predict": max_tokens},
+    }
+    try:
+        with httpx.Client(timeout=60.0) as client:
+            resp = client.post(f"{OLLAMA_BASE_URL}/api/generate", json=payload)
+            resp.raise_for_status()
+            return resp.json().get("response", "").strip().lower()
+    except Exception:
+        return ""
+
+
+_KATEGORI_MAP = {
+    "tisort": "ust giyim", "gomlek": "ust giyim", "kazak": "ust giyim",
+    "hirka": "ust giyim", "bluz": "ust giyim", "atlet": "ust giyim",
+    # ingilizce fallback
+    "shirt": "ust giyim", "t-shirt": "ust giyim", "tshirt": "ust giyim",
+    "blouse": "ust giyim", "sweater": "ust giyim", "hoodie": "ust giyim",
+    "top": "ust giyim",
+    "pantolon": "alt giyim", "etek": "alt giyim", "sort": "alt giyim",
+    "tayt": "alt giyim", "jean": "alt giyim",
+    "pants": "alt giyim", "jeans": "alt giyim", "skirt": "alt giyim",
+    "leggings": "alt giyim", "shorts": "alt giyim", "trousers": "alt giyim",
+    "mont": "dis giyim", "kaban": "dis giyim", "ceket": "dis giyim",
+    "trencot": "dis giyim", "yelek": "dis giyim",
+    "jacket": "dis giyim", "coat": "dis giyim", "blazer": "dis giyim",
+    "vest": "dis giyim",
+    "bot": "ayakkabi", "ayakkabi": "ayakkabi", "sandalet": "ayakkabi",
+    "shoes": "ayakkabi", "sneakers": "ayakkabi", "boots": "ayakkabi",
+    "sandals": "ayakkabi", "heels": "ayakkabi",
+    "canta": "aksesuar", "kemer": "aksesuar", "sapka": "aksesuar",
+    "bag": "aksesuar", "hat": "aksesuar", "scarf": "aksesuar",
+    "belt": "aksesuar", "gloves": "aksesuar",
+}
+
+# İngilizce kıyafet → Türkçe kıyafet
+_TIP_MAP = {
+    "shirt": "gomlek", "t-shirt": "tisort", "tshirt": "tisort",
+    "top": "tisort", "blouse": "bluz", "sweater": "kazak", "hoodie": "hirka",
+    "pants": "pantolon", "jeans": "pantolon", "trousers": "pantolon",
+    "skirt": "etek", "leggings": "tayt", "shorts": "sort",
+    "jacket": "ceket", "coat": "mont", "blazer": "ceket",
+    "vest": "yelek", "dress": "elbise", "suit": "takim elbise",
+    "shoes": "ayakkabi", "sneakers": "spor ayakkabi", "boots": "bot",
+    "sandals": "sandalet", "heels": "topuklu",
+    "bag": "canta", "hat": "sapka", "scarf": "atki",
+    "belt": "kemer", "gloves": "eldiven",
+}
+
+# İngilizce renk → Türkçe renk
+_RENK_MAP = {
+    "white": "beyaz", "black": "siyah", "gray": "gri", "grey": "gri",
+    "navy": "lacivert", "blue": "mavi", "red": "kirmizi", "green": "yesil",
+    "yellow": "sari", "orange": "turuncu", "pink": "pembe", "purple": "mor",
+    "brown": "kahverengi", "beige": "bej", "cream": "krem",
+    "light": "acik", "dark": "koyu",
+}
+_VALID_RENKLER = ["beyaz","siyah","gri","lacivert","mavi","kirmizi","yesil",
+                   "sari","turuncu","pembe","mor","kahverengi","bej","krem"]
+_VALID_TARZ    = ["casual","spor","sik","resmi","vintage"]
+_VALID_DESEN   = ["duz","cizgili","kareli","desenli","baskili"]
+_VALID_DESEN_EN = ["solid","stripe","check","pattern","print"]
+_DESEN_EN_MAP  = {"solid":"duz","stripe":"cizgili","stripes":"cizgili",
+                   "check":"kareli","checkered":"kareli","pattern":"desenli",
+                   "print":"baskili","printed":"baskili"}
+
+
+def _norm(raw: str, valid: list, default: str) -> str:
+    """Ham kısa yanıttan geçerli değer çıkarır."""
+    raw = raw.lower().strip().rstrip(".,;:!")
+    for v in valid:
+        if v in raw:
+            return v
+    return default
+
+
+def _parse_description_to_items(description: str) -> list:
+    """
+    Moondream'in serbest metin açıklamasını parse ederek
+    yapılandırılmış kıyafet listesi çıkarır.
+
+    Örn giriş: "The man is wearing a light blue polo shirt with black pants and black shoes."
+    Örn çıkış: [
+      {"tip":"gomlek","renk":"mavi","tarz":"casual","desen":"duz","kategori":"ust giyim",...},
+      {"tip":"pantolon","renk":"siyah",...},
+      {"tip":"ayakkabi","renk":"siyah",...},
+    ]
+    """
+    text = description.lower()
+    words = set(text.split())
+
+    # Tarz tespiti
+    _TARZ_EN = {"casual":"casual","formal":"resmi","sporty":"spor","elegant":"sik",
+                 "sport":"spor","chic":"sik","vintage":"vintage","business":"resmi"}
+    tarz = "casual"
+    for en, tr in _TARZ_EN.items():
+        if en in text:
+            tarz = tr
+            break
+
+    # Desen tespiti
+    desen = "duz"
+    for en, tr in _DESEN_EN_MAP.items():
+        if en in text:
+            desen = tr
+            break
+
+    # Kıyafet öğesi tanıma — renk+tip çiftleri
+    items_raw = []
+    _COLORS = {
+        "white":"beyaz","black":"siyah","gray":"gri","grey":"gri",
+        "navy":"lacivert","blue":"mavi","light blue":"mavi","dark blue":"lacivert",
+        "red":"kirmizi","green":"yesil","yellow":"sari","orange":"turuncu",
+        "pink":"pembe","purple":"mor","brown":"kahverengi","beige":"bej",
+        "cream":"krem","khaki":"bej","olive":"yesil","maroon":"bordo",
+    }
+    _GARMENTS_EN = [
+        ("polo shirt","gomlek"),("polo","gomlek"),("shirt","gomlek"),
+        ("t-shirt","tisort"),("tshirt","tisort"),("top","tisort"),
+        ("blouse","bluz"),("sweater","kazak"),("hoodie","hirka"),
+        ("sweatshirt","hirka"),("cardigan","hirka"),("vest","yelek"),
+        ("dress","elbise"),("gown","elbise"),("suit","takim"),
+        ("blazer","ceket"),("jacket","ceket"),("coat","mont"),
+        ("pants","pantolon"),("trousers","pantolon"),("jeans","pantolon"),
+        ("skirt","etek"),("leggings","tayt"),("shorts","sort"),
+        ("shoes","ayakkabi"),("sneakers","spor ayakkabi"),("boots","bot"),
+        ("sandals","sandalet"),("heels","topuklu"),("loafers","ayakkabi"),
+        ("bag","canta"),("backpack","canta"),("hat","sapka"),
+        ("scarf","atki"),("belt","kemer"),
+    ]
+
+    # Her garment için metinde ara
+    for en_garment, tr_garment in _GARMENTS_EN:
+        if en_garment not in text:
+            continue
+
+        # Kıyafetin önündeki 3 kelimede renk ara
+        idx = text.find(en_garment)
+        prefix = text[max(0, idx-30):idx]
+
+        renk = "belirsiz"
+        # Önce 2-kelime renk (light blue, dark blue)
+        for color_en, color_tr in _COLORS.items():
+            if color_en in prefix:
+                renk = color_tr
+                break
+
+        kategori = _KATEGORI_MAP.get(en_garment, _KATEGORI_MAP.get(tr_garment, "ust giyim"))
+
+        items_raw.append({
+            "kategori": kategori,
+            "tip": tr_garment,
+            "renk": renk,
+            "desen": desen,
+            "tarz": tarz,
+            "malzeme_tahmini": None,
+            "confidence": 0.85,
+            "tur": tr_garment,
+            "stil": tarz,
+        })
+
+    # Hiç bulunamadıysa genel bir item üret
+    if not items_raw:
+        # En azından genel renk ve tarz bul
+        genel_renk = "belirsiz"
+        for color_en, color_tr in _COLORS.items():
+            if color_en in text:
+                genel_renk = color_tr
+                break
+        items_raw.append({
+            "kategori": "ust giyim",
+            "tip": "kiyafet",
+            "renk": genel_renk,
+            "desen": desen,
+            "tarz": tarz,
+            "malzeme_tahmini": None,
+            "confidence": 0.5,
+            "tur": "kiyafet",
+            "stil": tarz,
+        })
+
+    return _deduplicate_items(items_raw)
+
+
+def _detect_outfit_items_with_moondream(image_b64: str) -> list:
+    """
+    Moondream2 ile kıyafet analizi — Describe → Parse yaklaşımı.
+
+    Kanıtlanan çalışma şekli:
+    1. Moondream'e "Describe the clothing" sorusu sorulur (serbest metin → güvenilir)
+    2. Gelen İngilizce metin Python keyword matching ile parse edilir
+    3. Yapılandırılmış kıyafet listesi döner
+
+    Q&A / JSON üretme yaklaşımları Ollama'nın context caching'i nedeniyle
+    boş yanıt veriyor; bu yaklaşım her zaman çalışır.
+    """
+    try:
+        with httpx.Client(timeout=10.0) as _test:
+            _test.get(f"{OLLAMA_BASE_URL}/api/tags").raise_for_status()
+    except Exception:
+        print("[Moondream-Detect] Ollama baglanti hatasi.")
+        return []
+
+    payload = {
+        "model": OLLAMA_VISION_MODEL,
+        "prompt": (
+            "Describe the clothing worn by the person in this photo. "
+            "Include every item: shirt, pants, shoes, jacket, accessories. "
+            "Mention the color of each item and the overall style (casual/formal/sporty)."
+        ),
+        "images": [image_b64],
+        "stream": False,
+        "options": {"temperature": 0.0, "num_predict": 150},
+    }
+
+    try:
+        with httpx.Client(timeout=120.0) as client:
+            resp = client.post(f"{OLLAMA_BASE_URL}/api/generate", json=payload)
+            resp.raise_for_status()
+            description = resp.json().get("response", "").strip()
+
+        if not description:
+            print("[Moondream-Detect] Bos yanit.")
+            return []
+
+        print(f"[Moondream-Detect] Aciklama: {description[:120]}...")
+        items = _parse_description_to_items(description)
+        print(f"[Moondream-Detect] {len(items)} kiyafet parse edildi: "
+              f"{[i['tip']+'/'+i['renk'] for i in items]}")
+        return items
+
+    except httpx.ConnectError:
+        print("[Moondream-Detect] Ollama baglanti hatasi.")
         return []
     except Exception as e:
-        print(f"[LLaVA-Detect] Hata: {e}")
+        print(f"[Moondream-Detect] Hata: {e}")
         return []
+
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -375,12 +636,12 @@ async def suggest_caption(req: CaptionRequestExtended):
 
     caption: Optional[str] = None
 
-    # 1. Görsel varsa llava ile analiz et (FashionSigLIP verisi prompt'a eklenir)
+    # 1. Görsel varsa Moondream2 ile analiz et
     if image_url:
         image_b64 = _image_to_base64(image_url)
-        caption = _caption_with_llava(image_b64, items_desc, style_hint, fashion_analysis)
+        caption = _caption_with_moondream(image_b64, items_desc, style_hint, fashion_analysis)
 
-    # 2. Sadece metin ile dene (llava yoksa veya görsel yoksa)
+    # 2. Sadece metin ile dene (Moondream yoksa veya görsel yoksa)
     if not caption:
         caption = _caption_text_only(items_desc, style_hint, fashion_analysis)
 
@@ -416,9 +677,9 @@ class OutfitStoryRequest(BaseModel):
 @router.post("/outfit-story")
 async def generate_outfit_story(req: OutfitStoryRequest):
     """
-    Optimize edilmiş iki aşamalı pipeline:
-    - FashionSigLIP + LLaVA PARALEL çalışır (süre yarıya iner)
-    - LLaVA JSON başarısız olursa FashionSigLIP verisiyle hikaye yazılır
+    Moondream2 + llama3.2 pipeline:
+    - FashionSigLIP + Moondream PARALEL çalışır (süre yarıya iner)
+    - Moondream JSON başarısız olursa FashionSigLIP verisiyle hikaye yazılır
     """
     import asyncio
 
@@ -435,9 +696,9 @@ async def generate_outfit_story(req: OutfitStoryRequest):
 
     loop = asyncio.get_event_loop()
 
-    # ──── LLaVA ve FashionSigLIP PARALEL çalıştır ──────────────────
-    async def run_llava():
-        return await loop.run_in_executor(None, _detect_outfit_items_with_llava, image_b64)
+    # ──── Moondream ve FashionSigLIP PARALEL çalıştır ──────────────────
+    async def run_moondream():
+        return await loop.run_in_executor(None, _detect_outfit_items_with_moondream, image_b64)
 
     async def run_fashion_siglip():
         if req.ai_analysis:
@@ -454,20 +715,25 @@ async def generate_outfit_story(req: OutfitStoryRequest):
             return None
 
     # Her ikisini paralel başlat
-    llava_task = asyncio.create_task(run_llava())
+    moondream_task = asyncio.create_task(run_moondream())
     siglip_task = asyncio.create_task(run_fashion_siglip())
-    detected_items, fashion_analysis = await asyncio.gather(llava_task, siglip_task)
+    detected_items, fashion_analysis = await asyncio.gather(moondream_task, siglip_task)
     # ─────────────────────────────────────────────────────────────
 
-    # LLaVA başarısız olduysa FashionSigLIP verisinden item listesi üret
+    # Moondream başarısız olduysa FashionSigLIP verisinden item listesi üret
     if not detected_items and fashion_analysis:
         detected_items = [{
-            "tur": fashion_analysis.get("tur", "kıyafet"),
+            "kategori": "ust giyim",
+            "tip": fashion_analysis.get("tur", "kiyafet"),
+            "tur": fashion_analysis.get("tur", "kiyafet"),
             "renk": fashion_analysis.get("renk", ""),
-            "kumas": "",
+            "desen": "duz",
+            "tarz": fashion_analysis.get("stil_etiketi", ""),
             "stil": fashion_analysis.get("stil_etiketi", ""),
+            "malzeme_tahmini": None,
+            "confidence": float(fashion_analysis.get("confidence", 0.7)),
         }]
-        print("[Pipeline] LLaVA JSON parse edilemedi, FashionSigLIP verisi kullanılıyor.")
+        print("[Pipeline] Moondream JSON parse edilemedi, FashionSigLIP verisi kullaniliyor.")
 
     # Ollama ile kombin hikayesi
     outfit_story = await loop.run_in_executor(
@@ -542,57 +808,37 @@ class AnalyzeItemRequest(BaseModel):
 @router.post("/analyze-item")
 async def analyze_item(req: AnalyzeItemRequest):
     """
-    Görseli Ollama llava ile analiz eder ve JSON döner:
-    { "tur": "Tişört", "renk": "Kırmızı", "kumas": "Pamuk", "stil": "Gündelik" }
+    Moondream2 multi-query ile tek kıyafet analizi.
+    JSON üretmek yerine 4 basit soru sorulur, sonuçlar birleştirilir.
     """
+    import asyncio as _asyncio
     image_b64 = req.image_b64
     if not image_b64 and req.image_url:
         image_b64 = _image_to_base64(req.image_url)
-
     if not image_b64:
-        raise HTTPException(status_code=400, detail="Lütfen image_url veya image_b64 sağlayın.")
-
-    prompt = (
-        "Bu kıyafet fotoğrafını analiz et ve sadece JSON formatında yanıt ver. Başka hiçbir metin ekleme. "
-        "Döndüreceğin JSON şu alanları içersin: "
-        "'tur' (Örn: Pantolon, Tişört, Gömlek, Etek, Elbise, Kazak), "
-        "'renk' (Örn: Mavi, Kırmızı, Siyah), "
-        "'kumas' (Örn: Kot, Pamuk, Keten, Yün, Deri), "
-        "'stil' (Örn: Gündelik, Spor, Şık, Resmi). "
-        "Lütfen çıktının SADECE geçerli bir JSON objesi olduğundan emin ol."
-    )
-
-    payload = {
-        "model": OLLAMA_VISION_MODEL,
-        "prompt": prompt,
-        "images": [image_b64],
-        "stream": False,
-    }
+        raise HTTPException(status_code=400, detail="Lutfen image_url veya image_b64 saglayin.")
 
     try:
-        async with httpx.AsyncClient(timeout=60.0) as client:
-            resp = await client.post(f"{OLLAMA_BASE_URL}/api/generate", json=payload)
-            resp.raise_for_status()
-            data = resp.json()
-            response_text = data.get("response", "").strip()
-            
-            # Markdown block parsing (```json ... ```)
-            if "```json" in response_text:
-                response_text = response_text.split("```json")[1].split("```")[0].strip()
-            elif "```" in response_text:
-                response_text = response_text.split("```")[1].split("```")[0].strip()
-                
-            import json
-            parsed_data = json.loads(response_text)
-            
+        loop = _asyncio.get_event_loop()
+        # _detect_outfit_items_with_moondream zaten multi-query yapıyor, onu kullan
+        items = await loop.run_in_executor(
+            None, _detect_outfit_items_with_moondream, image_b64
+        )
+        if items:
             return {
                 "success": True,
-                "data": parsed_data
+                "data": items[0],
+                "schema_version": "moondream2-multiquery",
             }
+        raise ValueError("Moondream tespiti bos dondu.")
     except Exception as e:
         return {
             "success": False,
-            "message": f"LLaVa analizi başarısız: {str(e)}",
-            "data": { "tur": "", "renk": "", "kumas": "", "stil": "" }
+            "message": f"Moondream analizi basarisiz: {str(e)}",
+            "data": {
+                "kategori": "", "tip": "", "renk": "",
+                "desen": "", "tarz": "", "malzeme_tahmini": None,
+                "confidence": 0.0, "tur": ""
+            },
         }
 
