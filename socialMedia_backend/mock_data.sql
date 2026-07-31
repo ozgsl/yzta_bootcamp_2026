@@ -8,10 +8,10 @@
 -- ============================================================
 
 -- 1. Kullanıcılar
-INSERT INTO users (user_id, username, display_name, avatar_url, bio, followers_count, following_count) VALUES
-    ('user-a-0001', 'elif_style',    'Elif Yılmaz',  'https://example.com/avatars/elif.jpg',   'Moda tutkunu 👗 | İstanbul', 1, 0),
-    ('user-b-0002', 'ahmet_trendy',  'Ahmet Demir',  'https://example.com/avatars/ahmet.jpg',  'Streetwear & sneakers 👟',    0, 1),
-    ('user-c-0003', 'zeynep_chic',   'Zeynep Kaya',  'https://example.com/avatars/zeynep.jpg', 'Minimalist stil ✨',          0, 0);
+INSERT INTO users (user_id, username, email, password_hash, display_name, avatar_url, bio, followers_count, following_count) VALUES
+    ('user-a-0001', 'elif_style',    'elif@example.com',    'hashed_password_a', 'Elif Yılmaz',  'https://example.com/avatars/elif.jpg',   'Moda tutkunu 👗 | İstanbul', 1, 0),
+    ('user-b-0002', 'ahmet_trendy',  'ahmet@example.com',   'hashed_password_b', 'Ahmet Demir',  'https://example.com/avatars/ahmet.jpg',  'Streetwear & sneakers 👟',    0, 1),
+    ('user-c-0003', 'zeynep_chic',   'zeynep@example.com',  'hashed_password_c', 'Zeynep Kaya',  'https://example.com/avatars/zeynep.jpg', 'Minimalist stil ✨',          0, 0);
 
 -- 2. Takip ilişkileri: B → A
 INSERT INTO follows (follower_id, following_id) VALUES

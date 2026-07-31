@@ -235,47 +235,105 @@ def create_manual_outfit(request: ManualOutfitCreateRequest, db: sqlite3.Connect
 
 @router.post("/analyze-image")
 def analyze_cloth_image(request: AnalyzeClothRequest):
-    """Analyzes clothing image using FashionSigLIP AI model."""
+    """
+    Kıyafet görselini AI ile analiz eder.
+    FashionSigLIP → 6 özellik (tür, renk, desen, malzeme, mevsim, kullanım)
+    + Moondream → zengin kıyafet açıklaması (kombin_notu için kullanılabilir)
+    Tüm yanıtlar Türkçe düz metin — kullanıcı JSON görmez.
+    """
+    import base64 as _b64
+    import httpx as _httpx
+
     image_url = request.gorsel_url
     if not image_url:
         raise HTTPException(status_code=400, detail="gorsel_url is required.")
-        
+
+    # Görseli base64'e çevir
+    image_b64: Optional[str] = None
     try:
         if image_url.startswith("http://") or image_url.startswith("https://"):
             filename = image_url.split("/")[-1]
-            local_path = Path("uploads") / filename
-            if not local_path.exists():
-                local_path = Path("static/uploads") / filename
-            
-            if local_path.exists():
-                result = fashion_classifier.classify_image(image_path=local_path)
-            else:
-                # URL üzerinden base64'e çevirerek analiz et
-                import httpx as _httpx, base64 as _b64
+            for candidate in [
+                Path("static/uploads") / filename,
+                Path("uploads") / filename,
+            ]:
+                if candidate.exists():
+                    image_b64 = _b64.b64encode(candidate.read_bytes()).decode()
+                    break
+            if not image_b64:
                 with _httpx.Client(timeout=15.0) as c:
                     r = c.get(image_url)
                     r.raise_for_status()
                 image_b64 = _b64.b64encode(r.content).decode()
-                result = fashion_classifier.classify_image(image_b64=image_b64)
         else:
-            result = fashion_classifier.classify_image(image_path=Path(image_url))
-
-        if not result.get("success"):
-            raise HTTPException(status_code=503, detail=f"AI model hatası: {result.get('error', 'Bilinmeyen hata')}")
-
-        return {
-            "tur": result["tur"],
-            "renk": result["renk"],
-            "stil_etiketi": result["stil_etiketi"],
-            "mevsim": result["mevsim"],
-            "post_category": result["post_category"],
-            "guven_skoru": result["confidence"],
-            "alternatifler": result.get("alternatifler", []),
-        }
-    except HTTPException:
-        raise
+            p = Path(image_url)
+            if p.exists():
+                image_b64 = _b64.b64encode(p.read_bytes()).decode()
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Image analysis error: {str(e)}")
+        raise HTTPException(status_code=400, detail=f"Görsel alınamadı: {e}")
+
+    if not image_b64:
+        raise HTTPException(status_code=400, detail="Görsel yüklenemedi.")
+
+    # FashionSigLIP — 6 özellik
+    attrs = fashion_classifier.classify_all_attributes(image_b64=image_b64)
+
+    if not attrs.get("success"):
+        # Fallback: eski 4-özellik metodu
+        attrs = fashion_classifier.classify_image(image_b64=image_b64)
+        if not attrs.get("success"):
+            raise HTTPException(
+                status_code=503,
+                detail=f"AI model hatası: {attrs.get('error', 'Bilinmeyen hata')}"
+            )
+        return {
+            "tur":          attrs.get("tur", ""),
+            "renk":         attrs.get("renk", ""),
+            "desen":        "düz",
+            "malzeme":      attrs.get("kumas", ""),
+            "mevsim":       attrs.get("mevsim", "tüm sezon"),
+            "kullanim":     attrs.get("stil_etiketi", "günlük kullanım"),
+            "stil_etiketi": attrs.get("stil_etiketi", ""),
+            "post_category": attrs.get("post_category", ""),
+            "guven_skoru":  attrs.get("confidence", 0.0),
+        }
+
+    def _best(attr: str, fallback: str = "") -> str:
+        v = attrs.get(attr)
+        if isinstance(v, dict):
+            return v.get("best", fallback)
+        return str(v) if v else fallback
+
+    return {
+        # Gardrop formu için doğrudan kullanılabilir alanlar (düz Türkçe)
+        "tur":          _best("category", "bilinmiyor"),
+        "renk":         _best("color", "bilinmiyor"),
+        "desen":        _best("pattern", "düz"),
+        "malzeme":      _best("material", "bilinmiyor"),
+        "mevsim":       _best("season", "tüm sezon"),
+        "kullanim":     _best("occasion", "günlük kullanım"),
+        "stil_etiketi": _best("occasion", "gündelik"),
+        "post_category": attrs.get("post_category", ""),
+        "guven_skoru":  round(
+            attrs.get("category", {}).get("confidence", 0.0)
+            if isinstance(attrs.get("category"), dict) else 0.0,
+            2
+        ),
+        # Alternatifler (Flutter'da dropdown için)
+        "alternatif_turler": [
+            t["label"] for t in (
+                attrs.get("category", {}).get("top_3", [])
+                if isinstance(attrs.get("category"), dict) else []
+            )
+        ],
+        "alternatif_renkler": [
+            t["label"] for t in (
+                attrs.get("color", {}).get("top_3", [])
+                if isinstance(attrs.get("color"), dict) else []
+            )
+        ],
+    }
+
 
 
 @router.delete("/outfits/{outfit_id}")

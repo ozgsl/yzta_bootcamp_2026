@@ -36,7 +36,7 @@ class CreatePostProvider extends ChangeNotifier {
   String _suggestedCaption = '';
   String get suggestedCaption => _suggestedCaption;
 
-  /// LLaVA tarafından tespit edilen kıyafetler
+  /// Moondream tarafından tespit edilen kıyafetler
   List<Map<String, dynamic>> _detectedItems = [];
   List<Map<String, dynamic>> get detectedItems => _detectedItems;
 

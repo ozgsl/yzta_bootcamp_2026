@@ -501,7 +501,7 @@ class _CreatePostScreenState extends ConsumerState<CreatePostScreen> {
           Padding(
             padding: const EdgeInsets.only(top: AppTheme.spacingXS),
             child: Text(
-              'LLaVA ile kıyafet tespiti → Ollama ile kombin açıklaması',
+              'Moondream ile kıyafet tespiti → Ollama ile kombin açıklaması',
               style: TextStyle(
                 color: (Theme.of(context).textTheme.bodySmall?.color ?? Colors.grey)
                     .withValues(alpha: 0.6),
@@ -528,7 +528,7 @@ class _CreatePostScreenState extends ConsumerState<CreatePostScreen> {
     return [
       const SizedBox(height: AppTheme.spacingXS),
       Text(
-        'LLaVA ile Tespit Edilen Kıyafetler:',
+        'Moondream ile Tespit Edilen Kıyafetler:',
         style: TextStyle(
           color: (Theme.of(context).textTheme.bodySmall?.color ?? Colors.grey)
               .withValues(alpha: 0.8),

@@ -68,13 +68,13 @@ async def _warmup_ollama_models():
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Uygulama başlatılırken veritabanını oluşturur, FashionSigLIP ve LLaVA modellerini ön-ısıtır."""
+    """Uygulama başlatılırken veritabanını oluşturur, FashionSigLIP ve Moondream modellerini ön-ısıtır."""
     init_db()
     import asyncio
     loop = asyncio.get_event_loop()
     # FashionSigLIP — Kıyafet sınıflandırma modelini bellekte hazırla
     await loop.run_in_executor(None, load_model_on_startup)
-    # LLaVA + Ollama — Arka planda modelleri belleğe yükle (warm-up)
+    # Moondream + Ollama — Arka planda modelleri belleğe yükle (warm-up)
     asyncio.create_task(_warmup_ollama_models())
     yield
 

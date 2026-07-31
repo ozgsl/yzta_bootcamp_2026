@@ -3,14 +3,14 @@ AI Caption Servisi — Tamamen Yerel, Ollama tabanlı. Harici API yok.
 Gemini veya herhangi bir harici API KULLANILMAZ.
 
 Pipeline:
-  1. llava  (görsel model)  → Kıyafetleri JSON listesi olarak tespit eder
+  1. moondream  (görsel model)  → Kıyafetleri JSON listesi olarak tespit eder
   2. llama3.2 (metin model) → Tespiti alıp kombinin neden seçildiğini açıklar
 
 Endpoints:
   POST /captions/suggest       → Kısa caption üretir (mevcut, korundu)
   POST /captions/upload        → Resim yükler, URL + FashionSigLIP analizi döner
   POST /captions/analyze-item  → Tek kıyafet analizi (mevcut, korundu)
-  POST /captions/outfit-story  → LLaVA tespit + Ollama hikaye (YENİ)
+  POST /captions/outfit-story  → MoonDream tespit + Ollama hikaye (YENİ)
 """
 from __future__ import annotations
 
@@ -176,7 +176,6 @@ def _caption_with_moondream(
     if not image_b64:
         return None
 
-    # Moondream için kısa ve net prompt — model kısa sorulara daha iyi yanıt veriyor
     context_parts = []
     if outfit_desc and outfit_desc not in ("Kombin", "diger: bilinmiyor"):
         context_parts.append(f"Outfit: {outfit_desc}.")
@@ -202,7 +201,6 @@ def _caption_with_moondream(
         "prompt": prompt,
         "images": [image_b64],
         "stream": False,
-        "keep_alive": "10m",
         "options": {"temperature": 0.7, "num_predict": 100},
     }
 
@@ -210,17 +208,103 @@ def _caption_with_moondream(
         with httpx.Client(timeout=120.0) as client:
             resp = client.post(f"{OLLAMA_BASE_URL}/api/generate", json=payload)
             if resp.status_code == 404:
-                print(f"[Moondream] Model '{OLLAMA_VISION_MODEL}' kurulu degil. 'ollama pull moondream' calistir.")
+                print(f"[Moondream] Model '{OLLAMA_VISION_MODEL}' kurulu degil.")
                 return None
             resp.raise_for_status()
             result = resp.json().get("response", "").strip()
             return result[:280] if result else None
     except httpx.ConnectError:
-        print("[Moondream] Ollama baglanti hatasi — ollama serve calisiyor mu?")
+        print("[Moondream] Ollama baglanti hatasi")
         return None
     except Exception as e:
         print(f"[Moondream] Caption hatasi: {e}")
         return None
+
+
+def _describe_clothing_with_moondream(image_b64: str) -> str:
+    """
+    Moondream'e kıyafet hakkında ayrıntılı İngilizce açıklama sorulur.
+    Bu açıklama hem gardrop notları için hem de sosyal medya metni üretimi için kullanılır.
+    Kullanıcının verdiği describe_clothing() fonksiyonu ile birebir aynı prompt.
+    """
+    prompt = (
+        "Look closely at this piece of clothing and describe it in detail. "
+        "Cover all of the following, in a few sentences each where relevant:\n"
+        "- Color(s) and any color-blocking or gradients\n"
+        "- Pattern or print (e.g. solid, striped, floral, graphic)\n"
+        "- Fabric or material texture (e.g. denim, knit, leather, silky, ribbed)\n"
+        "- Fit and silhouette (e.g. oversized, slim-fit, cropped, flowy)\n"
+        "- Neckline, collar, or sleeve style, if applicable\n"
+        "- Closures and hardware (buttons, zippers, drawstrings, buckles)\n"
+        "- Any visible logos, text, or brand markings\n"
+        "- Notable embellishments (embroidery, sequins, patches, distressing)\n"
+        "- Apparent condition (new-looking, worn-in, vintage)\n"
+        "- What occasions or seasons this item would suit\n"
+        "Be specific and concrete rather than generic."
+    )
+    payload = {
+        "model": OLLAMA_VISION_MODEL,
+        "prompt": prompt,
+        "images": [image_b64],
+        "stream": False,
+        "options": {"temperature": 0.3, "num_predict": 300},
+    }
+    try:
+        with httpx.Client(timeout=120.0) as client:
+            resp = client.post(f"{OLLAMA_BASE_URL}/api/generate", json=payload)
+            resp.raise_for_status()
+            return resp.json().get("response", "").strip()
+    except Exception as e:
+        print(f"[Moondream-Describe] Hata: {e}")
+        return ""
+
+
+def _write_social_caption_with_moondream(
+    image_b64: str,
+    attributes: dict,
+    description: str,
+) -> str:
+    """
+    FashionSigLIP özelliklerini + Moondream açıklamasını alarak
+    sosyal medya gönderisi yazar. Kullanıcının write_social_caption() ile aynı mantık.
+    Yanıt Türkçe olacak şekilde istenir.
+    """
+    # Özellik özetini düz metin olarak hazırla
+    attr_summary = ", ".join(
+        f"{k}: {v['best']}"
+        for k, v in attributes.items()
+        if isinstance(v, dict) and "best" in v
+    )
+
+    prompt = (
+        f"Here is what we know about this clothing item:\n"
+        f"- Structured attributes: {attr_summary}\n"
+        f"- Detailed visual description: {description}\n\n"
+        "Write a Turkish social-media post for a digital wardrobe app:\n"
+        "1. Two short, engaging paragraphs in TURKISH introducing the item as if the owner is "
+        "sharing it on their wardrobe feed. Mention color, material, fit, and styling ideas "
+        "(what to pair it with, what occasion it suits). Use a friendly, stylish tone.\n"
+        "2. After the paragraphs, add a line of 4-6 relevant Turkish and English hashtags "
+        "(e.g. #denimceket #casualstyle #moda).\n"
+        "IMPORTANT: Write entirely in Turkish except for the hashtags. No English paragraphs."
+    )
+    payload = {
+        "model": OLLAMA_VISION_MODEL,
+        "prompt": prompt,
+        "images": [image_b64],
+        "stream": False,
+        "options": {"temperature": 0.7, "num_predict": 350},
+    }
+    try:
+        with httpx.Client(timeout=120.0) as client:
+            resp = client.post(f"{OLLAMA_BASE_URL}/api/generate", json=payload)
+            resp.raise_for_status()
+            return resp.json().get("response", "").strip()
+    except Exception as e:
+        print(f"[Moondream-Caption] Hata: {e}")
+        return ""
+
+
 
 
 # ───────────────────────────────────────────────────────────────────────────
@@ -608,7 +692,7 @@ async def suggest_caption(req: CaptionRequestExtended):
 
     Öncelik sırası (hepsi yerel):
       1. FashionSigLIP ile görsel analizi (eğer model yüklüyse ve görsel varsa)
-      2. llava ile görsel analizi (Ollama)
+      2. Moondream ile görsel analizi (Ollama)
       3. llama3.2 metin fallback
       4. Statik fallback
 
@@ -820,7 +904,6 @@ async def analyze_item(req: AnalyzeItemRequest):
 
     try:
         loop = _asyncio.get_event_loop()
-        # _detect_outfit_items_with_moondream zaten multi-query yapıyor, onu kullan
         items = await loop.run_in_executor(
             None, _detect_outfit_items_with_moondream, image_b64
         )
@@ -842,3 +925,117 @@ async def analyze_item(req: AnalyzeItemRequest):
             },
         }
 
+
+# ─────────────────────────────────────────────────────────────────────────────
+# YENİ ENDPOINT: POST /captions/analyze-and-describe
+# Hem gardrop hem sosyal medya için birleşik AI analiz pipeline'ı
+# FashionSigLIP (6 özellik) + Moondream (zengin açıklama + caption)
+# ─────────────────────────────────────────────────────────────────────────────
+
+class AnalyzeDescribeRequest(BaseModel):
+    image_b64:  Optional[str] = None   # Base64 görsel
+    image_url:  Optional[str] = None   # Veya URL
+    mode:       str = "wardrobe"        # "wardrobe" | "social" | "both"
+
+
+@router.post("/analyze-and-describe")
+async def analyze_and_describe(req: AnalyzeDescribeRequest):
+    """
+    Tek fotoğraftan tam AI analizi yapar:
+
+    1. FashionSigLIP → 6 özellik (kategori, renk, desen, malzeme, mevsim, kullanım)
+    2. Moondream     → Kıyafetin zengin İngilizce açıklaması
+    3. Moondream     → Türkçe sosyal medya gönderisi (mode="social" veya "both" ise)
+
+    Kullanıcıya ASLA JSON gösterilmez — sadece düz Türkçe metin.
+
+    Dönüş:
+    {
+      "tur":         "gömlek",
+      "renk":        "mavi",
+      "desen":       "düz",
+      "malzeme":     "pamuk",
+      "mevsim":      "ilkbahar",
+      "kullanim":    "günlük kullanım",
+      "stil":        "gündelik",
+      "post_category": "üst giyim",
+      "aciklama":    "Açık mavi polo gömlek, ince pamuklu kumaşı ile...",
+      "sosyal_metin": "Dolabımın yeni favorisi! ... #gomlek #mavi",
+    }
+    """
+    import asyncio as _asyncio
+
+    # 1) Görseli al
+    image_b64 = req.image_b64
+    if not image_b64 and req.image_url:
+        image_b64 = _image_to_base64(req.image_url)
+    if not image_b64:
+        raise HTTPException(status_code=400, detail="image_b64 veya image_url gerekli.")
+
+    loop = _asyncio.get_event_loop()
+
+    # 2) FashionSigLIP — 6 özellik (CPU bound → executor)
+    attrs_raw = await loop.run_in_executor(
+        None,
+        lambda: fashion_classifier.classify_all_attributes(image_b64=image_b64),
+    )
+    if not attrs_raw.get("success"):
+        # Model henüz yüklü değilse temel sınıflandırmayı dene
+        attrs_raw = await loop.run_in_executor(
+            None,
+            lambda: fashion_classifier.classify_image(image_b64=image_b64),
+        )
+
+    # 3) Moondream — zengin açıklama (her zaman)
+    description = await loop.run_in_executor(
+        None,
+        lambda: _describe_clothing_with_moondream(image_b64),
+    )
+
+    # 4) Sosyal medya metni (isteğe bağlı)
+    sosyal_metin = ""
+    if req.mode in ("social", "both"):
+        # Sadece "both" veya "social" modda üret
+        attrs_for_caption = {
+            k: v for k, v in attrs_raw.items()
+            if isinstance(v, dict) and "best" in v
+        }
+        sosyal_metin = await loop.run_in_executor(
+            None,
+            lambda: _write_social_caption_with_moondream(
+                image_b64, attrs_for_caption, description
+            ),
+        )
+
+    # 5) Yanıtı düz Türkçe alanlar olarak hazırla (JSON değil, metin)
+    def _best(attr: str, fallback: str = "") -> str:
+        v = attrs_raw.get(attr)
+        if isinstance(v, dict):
+            return v.get("best", fallback)
+        return str(v) if v else fallback
+
+    return {
+        # Gardrop alanları — direkt forma doldurulabilir
+        "tur":          _best("category", "bilinmiyor"),
+        "renk":         _best("color", "bilinmiyor"),
+        "desen":        _best("pattern", "düz"),
+        "malzeme":      _best("material", "bilinmiyor"),
+        "mevsim":       _best("season", "tüm sezon"),
+        "kullanim":     _best("occasion", "günlük kullanım"),
+        "stil":         _best("occasion", "gündelik"),    # stil_etiketi için alias
+        "post_category": attrs_raw.get("post_category", ""),
+
+        # Moondream açıklama — düz metin
+        "aciklama":     description,
+
+        # Sosyal medya — düz metin (mode="social"/"both" ise dolu, yoksa "")
+        "sosyal_metin": sosyal_metin,
+
+        # Güven skoru
+        "guven": round(
+            attrs_raw.get("category", {}).get("confidence", 0.0)
+            if isinstance(attrs_raw.get("category"), dict)
+            else 0.0,
+            2,
+        ),
+    }
