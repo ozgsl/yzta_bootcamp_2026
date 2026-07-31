@@ -111,19 +111,55 @@ class ItemRepository:
         return cur.rowcount > 0
 
     # ---------- Chat & Outfits ----------
-    def save_chat_message(self, user_id: str, role: str, message: str):
+    def create_chat_session(self, user_id: str, session_id: str, title: str):
         self.db.execute(
-            "INSERT INTO sohbet_gecmisi (user_id, rol, icerik) VALUES (?, ?, ?)",
-            (user_id, role, message),
+            "INSERT INTO sohbet_oturumlar (session_id, user_id, title) VALUES (?, ?, ?)",
+            (session_id, user_id, title),
         )
         self.db.commit()
 
-    def get_chat_history(self, user_id: str, limit: int = 20) -> list[dict]:
+    def get_chat_sessions(self, user_id: str) -> list[dict]:
         rows = self.db.execute(
-            "SELECT rol, icerik AS mesaj FROM sohbet_gecmisi WHERE user_id = ? ORDER BY id DESC LIMIT ?",
-            (user_id, limit),
+            "SELECT session_id, title, created_at FROM sohbet_oturumlar WHERE user_id = ? ORDER BY created_at DESC",
+            (user_id,)
         ).fetchall()
-        return [dict(row) for row in reversed(rows)]
+        return [dict(row) for row in rows]
+
+    def save_chat_message(self, user_id: str, role: str, message: str, session_id: str = None):
+        self.db.execute(
+            "INSERT INTO sohbet_gecmisi (session_id, user_id, rol, icerik) VALUES (?, ?, ?, ?)",
+            (session_id, user_id, role, message),
+        )
+        self.db.commit()
+
+    def get_chat_history(self, user_id: str, limit: int = 20, session_id: str = None) -> list[dict]:
+        import json
+        if session_id:
+            rows = self.db.execute(
+                "SELECT rol, icerik AS mesaj FROM sohbet_gecmisi WHERE user_id = ? AND session_id = ? ORDER BY id DESC LIMIT ?",
+                (user_id, session_id, limit),
+            ).fetchall()
+        else:
+            rows = self.db.execute(
+                "SELECT rol, icerik AS mesaj FROM sohbet_gecmisi WHERE user_id = ? AND session_id IS NULL ORDER BY id DESC LIMIT ?",
+                (user_id, limit),
+            ).fetchall()
+            
+        result = []
+        for row in reversed(rows):
+            try:
+                content = json.loads(row["mesaj"])
+                if isinstance(content, dict) and "text" in content:
+                    result.append({
+                        "rol": row["rol"],
+                        "mesaj": content["text"],
+                        "outfit_items": content.get("outfit_items", [])
+                    })
+                else:
+                    result.append({"rol": row["rol"], "mesaj": row["mesaj"], "outfit_items": []})
+            except json.JSONDecodeError:
+                result.append({"rol": row["rol"], "mesaj": row["mesaj"], "outfit_items": []})
+        return result
 
     def save_outfit_recommendation(self, user_id: str, context_json: str, item_ids: list[int], description: str) -> int:
         cur = self.db.execute(

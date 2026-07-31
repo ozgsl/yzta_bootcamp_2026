@@ -214,19 +214,35 @@ CREATE INDEX IF NOT EXISTS idx_kategoriler_tip
     ON kategoriler(tip);
 
 -- ============================================================
--- 11. SOHBET_GECMİSİ (AI Chat History)
+-- 11. SOHBET_OTURUMLARI (AI Chat Sessions)
+-- ============================================================
+CREATE TABLE IF NOT EXISTS sohbet_oturumlar (
+    session_id TEXT PRIMARY KEY,
+    user_id    TEXT NOT NULL,
+    title      TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_sohbet_oturum_user
+    ON sohbet_oturumlar(user_id, created_at DESC);
+
+-- ============================================================
+-- 11.1 SOHBET_GECMİSİ (AI Chat History)
 -- ============================================================
 CREATE TABLE IF NOT EXISTS sohbet_gecmisi (
     id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_id TEXT,
     user_id    TEXT NOT NULL,
     rol        TEXT NOT NULL CHECK (rol IN ('user', 'assistant')),
     icerik     TEXT NOT NULL,
     tarih      TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-    FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE
+    FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE,
+    FOREIGN KEY (session_id) REFERENCES sohbet_oturumlar(session_id) ON DELETE CASCADE
 );
 
 CREATE INDEX IF NOT EXISTS idx_sohbet_user
-    ON sohbet_gecmisi(user_id, tarih DESC);
+    ON sohbet_gecmisi(user_id, session_id, tarih DESC);
 
 -- ============================================================
 -- 12. KOMBİN_ONERİLERİ (Outfit Suggestions)

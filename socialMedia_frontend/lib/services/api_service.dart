@@ -645,21 +645,33 @@ class ApiService {
     return await _delete('/wardrobe/items/$itemId', null);
   }
 
-  Future<dynamic> chat(String userId, String message, {String? weather}) async {
+  Future<dynamic> chat(String userId, String message, {String? weather, String? sessionId}) async {
     final body = {'user_id': userId, 'mesaj': message};
     if (weather != null) body['hava_durumu'] = weather;
+    if (sessionId != null) body['session_id'] = sessionId;
     return await _post('/wardrobe/chat', body);
   }
 
-  Future<List<Map<String, String>>> getChatHistory(String userId) async {
+  Future<List<Map<String, dynamic>>> getChatHistory(String userId, {String? sessionId}) async {
     try {
-      final data = await _getList('/wardrobe/chat/history/$userId');
+      final query = sessionId != null ? '?session_id=$sessionId' : '';
+      final data = await _getList('/wardrobe/chat/history/$userId$query');
       return data
           .map((e) => {
                 'role': (e as Map)['rol']?.toString() ?? 'user',
                 'text': e['mesaj']?.toString() ?? '',
+                'outfit_items': e['outfit_items'] ?? [],
               })
           .toList();
+    } catch (_) {
+      return [];
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> getChatSessions(String userId) async {
+    try {
+      final data = await _getList('/wardrobe/chat/sessions/$userId');
+      return data.cast<Map<String, dynamic>>();
     } catch (_) {
       return [];
     }

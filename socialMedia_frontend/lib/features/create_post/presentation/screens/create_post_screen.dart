@@ -636,13 +636,13 @@ class _CreatePostScreenState extends ConsumerState<CreatePostScreen> {
       height: 52,
       child: AnimatedOpacity(
         duration: const Duration(milliseconds: 200),
-        opacity: provider.isFormValid ? 1.0 : 0.5,
+        opacity: provider.isSubmitting ? 0.7 : 1.0,
         child: Container(
           decoration: AppTheme.gradientButtonDecoration(),
           child: Material(
             color: Colors.transparent,
             child: InkWell(
-              onTap: provider.isFormValid && !provider.isSubmitting
+              onTap: !provider.isSubmitting
                   ? () => _handleSubmit(provider)
                   : null,
               borderRadius: BorderRadius.circular(AppTheme.radiusRound),

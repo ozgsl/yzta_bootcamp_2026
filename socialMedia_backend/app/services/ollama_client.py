@@ -58,34 +58,47 @@ def _extract_json(text: str) -> dict:
 # ─────────────────────────────────────────────
 
 CHATBOT_SYSTEM_PROMPT = """\
-You are the AI Stylist Assistant for the digital wardrobe app.
-Your task is to have a short, warm, and natural conversation with the user to learn:
-- Where they are going / what they are doing (event: work, date, sports, travel, party, etc.)
-- Current weather (ask politely if unknown)
-- Style preference (casual, chic, sporty, etc.)
+Sen dijital gardırop uygulaması için profesyonel bir stilistsin (AI Stylist). KESİNLİKLE sadece Türkçe konuşmalısın. Anlamsız çeviriler (örn. göğüs ayarı vb.) veya yabancı kelimeler KULLANMA. Doğal ve sıcak bir dille kullanıcıyla sohbet et ve şunları öğren:
+- Nereye gidiyor / ne yapıyor (etkinlik: iş, randevu, spor, gezi vb.)
+- Hava durumu (bilmiyorsan kibarca sor)
+- Stil tercihi (rahat, şık, spor vb.)
 
-Rules:
-- Write short, friendly sentences. Ask one question at a time.
-- Continue conversation until you gather sufficient info (at least event + weather).
-- When ready, make a polite closing (e.g. "Great, preparing your outfit now!"), set is_ready = true.
+Eğer kullanıcı sana kombin önerisi sorarsa veya yeterince bilgi topladığını düşünüyorsan, ona kullanıcının gardırobundaki mevcut kıyafetlerden bir kombin ÖNER.
+Bunun için kullanıcının kıyafet listesini referans al ve seçtiğin kıyafetlerin ID'lerini 'onerilen_kiyafet_idleri' listesinde döndür. 
+Sadece sana verilen listedeki kıyafet ID'lerini kullan.
 
-ALWAYS output response in the following JSON format:
+Kurallar:
+- Sadece Türkçe, sıcak ve kısa cümleler kur. Aynı anda sadece bir soru sor.
+- Yeterli bilgi alana kadar sohbeti sürdür. (Örn. en azından hava durumu ve etkinlik bilgisi)
+- Bir kombin önerdiğinde kıyafetleri neden seçtiğini açıkla.
+- Asla sana verilen gardırop listesi dışından bir kıyafet varmış gibi davranma.
+
+HER ZAMAN yanıtını aşağıdaki JSON formatında ver:
 {
   "asistan_mesaji": "...",
   "baglam": {"etkinlik": "...", "hava_durumu": "...", "stil_tercihi": "..."},
-  "hazir_mi": false
+  "hazir_mi": false,
+  "onerilen_kiyafet_idleri": [1, 2] // Eğer kombin öneriyorsan seçtiğin ID'leri listele, önermiyorsan boş liste bırak []
 }"""
 
 
-def get_chat_response(history: List[Dict], new_message: str) -> dict:
+def get_chat_response(history: List[Dict], new_message: str, available_clothes: List[Dict] = None) -> dict:
     """
     history: [{"rol": "user"/"assistant", "mesaj": "..."}]
     new_message: User's new chat message
+    available_clothes: [{"id": 1, "isim": "...", ...}]
 
     Returns:
-    {"asistan_mesaji": "...", "baglam": {...}, "hazir_mi": bool}
+    {"asistan_mesaji": "...", "baglam": {...}, "hazir_mi": bool, "onerilen_kiyafet_idleri": [...]}
     """
-    messages = [{"role": "system", "content": CHATBOT_SYSTEM_PROMPT}]
+    system_content = CHATBOT_SYSTEM_PROMPT
+    if available_clothes:
+        clothes_info = []
+        for c in available_clothes:
+            clothes_info.append(f"[ID: {c.get('id')}] {c.get('kategori', '')} - {c.get('renk', '')} - {c.get('isim', '')}")
+        system_content += "\n\nKULLANICININ GARDIROBUNDAKİ KIYAFETLER:\n" + "\n".join(clothes_info)
+
+    messages = [{"role": "system", "content": system_content}]
     for m in history:
         role = "user" if m.get("rol") == "user" or m.get("role") == "user" else "assistant"
         content = m.get("mesaj") or m.get("content") or ""

@@ -50,6 +50,7 @@ class ChatRequest(BaseModel):
     user_id: str
     mesaj: str
     hava_durumu: Optional[str] = None
+    session_id: Optional[str] = None
 
 ChatIstek = ChatRequest
 
@@ -146,28 +147,57 @@ def delete_cloth(item_id: int, db: sqlite3.Connection = Depends(get_db)):
 @router.post("/chat")
 def chat(request: ChatRequest, db: sqlite3.Connection = Depends(get_db)):
     """Handles AI Stylist chat messages."""
+    import uuid
     repo = ItemRepository(db)
-    history = repo.get_chat_history(request.user_id)
+    
+    session_id = request.session_id
+    if not session_id:
+        session_id = str(uuid.uuid4())
+        title = request.mesaj[:30] + "..." if len(request.mesaj) > 30 else request.mesaj
+        repo.create_chat_session(request.user_id, session_id, title)
+
+    history = repo.get_chat_history(request.user_id, session_id=session_id)
     
     context_message = request.mesaj
     if request.hava_durumu:
         context_message = f"[System Note: Current weather at location is '{request.hava_durumu}']\nUser: {request.mesaj}"
 
     try:
-        result = ollama_client.get_chat_response(history, context_message)
+        clean_clothes = repo.get_clothes(request.user_id, clean_only=True)
+        result = ollama_client.get_chat_response(history, context_message, available_clothes=clean_clothes)
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"AI service error: {e}")
         
-    repo.save_chat_message(request.user_id, "user", request.mesaj)
-    repo.save_chat_message(request.user_id, "assistant", result.get("asistan_mesaji", ""))
+    suggested_items = []
+    if result.get("onerilen_kiyafet_idleri"):
+        valid_ids = {c["id"] for c in clean_clothes}
+        for item_id in result["onerilen_kiyafet_idleri"]:
+            if item_id in valid_ids:
+                suggested_items.append(next(c for c in clean_clothes if c["id"] == item_id))
+    
+    result["outfit_items"] = suggested_items
+    
+    import json
+    ai_content = json.dumps({"text": result.get("asistan_mesaji", ""), "outfit_items": suggested_items}, ensure_ascii=False)
+    
+    # User message will be text, but we should make it consistent if possible, though text is fine if we parse robustly.
+    repo.save_chat_message(request.user_id, "user", request.mesaj, session_id=session_id)
+    repo.save_chat_message(request.user_id, "assistant", ai_content, session_id=session_id)
+    result["session_id"] = session_id
     return result
 
 
 @router.get("/chat/history/{user_id}")
-def chat_history(user_id: str, db: sqlite3.Connection = Depends(get_db)):
+def chat_history(user_id: str, session_id: Optional[str] = None, db: sqlite3.Connection = Depends(get_db)):
     """Returns chat history for a user."""
     repo = ItemRepository(db)
-    return repo.get_chat_history(user_id)
+    return repo.get_chat_history(user_id, session_id=session_id)
+
+@router.get("/chat/sessions/{user_id}")
+def chat_sessions(user_id: str, db: sqlite3.Connection = Depends(get_db)):
+    """Returns chat sessions for a user."""
+    repo = ItemRepository(db)
+    return repo.get_chat_sessions(user_id)
 
 
 @router.post("/outfit/suggest")
