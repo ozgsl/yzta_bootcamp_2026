@@ -88,14 +88,13 @@ async def _warmup_ollama_models():
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Uygulama başlatılırken veritabanı şemasını doğrular, FashionSigLIP ve Moondream modellerini ön-ısıtır."""
-    pass  # Alembic ve seed scriptleri tarafından veritabanı yönetiliyor
-    import asyncio
-    loop = asyncio.get_event_loop()
-    # FashionSigLIP — Kıyafet sınıflandırma modelini bellekte hazırla
-    await loop.run_in_executor(None, load_model_on_startup)
-    # Moondream + Ollama — Arka planda modelleri belleğe yükle (warm-up)
-    asyncio.create_task(_warmup_ollama_models())
+    """Uygulama başlatılırken veritabanı şemasını anında kurur ve Cloud Run zaman aşımını önler."""
+    from app.models.base import Base, engine
+    try:
+        Base.metadata.create_all(bind=engine)
+        print("[Startup] Veritabanı tabloları hazırlandı.")
+    except Exception as e:
+        print(f"[Startup] Veritabanı uyarısı: {e}")
     yield
 
 
