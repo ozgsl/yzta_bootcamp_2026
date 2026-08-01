@@ -1,0 +1,14 @@
+socialMedia_frontend
+venv
+.venv
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache
+.ruff_cache
+.env
+dijital_gardrop.db
+.git
+.github
+*.log
