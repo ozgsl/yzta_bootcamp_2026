@@ -35,12 +35,16 @@ class AppConfig {
 
   static int get apiPort => _definedPort;
 
-  /// Tam backend URL'si
+  /// Tam backend URL'si (Canlı Google Cloud Run Sunucusu)
   static String get baseUrl {
-    if (_definedHost.startsWith('http://') ||
-        _definedHost.startsWith('https://')) {
-      return _definedHost;
+    if (_definedHost.isNotEmpty) {
+      if (_definedHost.startsWith('http://') ||
+          _definedHost.startsWith('https://')) {
+        return _definedHost;
+      }
+      return 'http://$_definedHost:$apiPort';
     }
-    return 'http://$apiHost:$apiPort';
+    // Google Cloud Run Canlı Sunucu Adresi (Kablosuz, USB'siz Her Yerden Bağlan!)
+    return 'https://dijital-gardrop-api-127622765965.europe-west1.run.app';
   }
 }
