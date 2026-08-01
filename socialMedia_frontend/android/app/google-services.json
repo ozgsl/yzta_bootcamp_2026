@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "868408286396",
+    "project_id": "spot-android-c805f",
+    "storage_bucket": "spot-android-c805f.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:868408286396:android:66b0730403dd5eb7b744b9",
+        "android_client_info": {
+          "package_name": "com.example.dijital_gardrop_social"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDwGuC3tQl-w_htC8oKbdIut-0GI-a93eo"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

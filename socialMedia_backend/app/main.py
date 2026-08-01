@@ -65,9 +65,9 @@ async def _warmup_ollama_models():
                     "options": {"num_predict": 1},
                 },
             )
-            print(f"[Warm-up] ✅ Moondream2 ({OLLAMA_VISION_MODEL}) belleğe yüklendi.")
+            print(f"[Warm-up] [OK] Moondream2 ({OLLAMA_VISION_MODEL}) belleğe yüklendi.")
         except Exception as e:
-            print(f"[Warm-up] ⚠️ Moondream2 yüklenemedi: {e}")
+            print(f"[Warm-up] [WARN] Moondream2 yüklenemedi: {e}")
 
         # llama3.2 warm-up
         try:
@@ -81,9 +81,9 @@ async def _warmup_ollama_models():
                     "options": {"num_predict": 1},
                 },
             )
-            print(f"[Warm-up] ✅ Ollama ({OLLAMA_TEXT_MODEL}) belleğe yüklendi.")
+            print(f"[Warm-up] [OK] Ollama ({OLLAMA_TEXT_MODEL}) belleğe yüklendi.")
         except Exception as e:
-            print(f"[Warm-up] ⚠️ Ollama yüklenemedi: {e}")
+            print(f"[Warm-up] [WARN] Ollama yüklenemedi: {e}")
 
 
 @asynccontextmanager

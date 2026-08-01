@@ -29,8 +29,8 @@ class AppConfig {
       }
     } catch (_) {}
 
-    // Fiziksel cihaz / Emülatör için yerel ağ IP'si
-    return '192.168.1.104';
+    // Fiziksel cihaz için USB Tünelleme (adb reverse) ile doğrudan PC'ye erişim
+    return '127.0.0.1';
   }
 
   static int get apiPort => _definedPort;

@@ -4,8 +4,8 @@ from pathlib import Path
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-# from app.core.ai.fashion_classifier import FashionClassifier
 from app.models.wardrobe import Color, Style, Subcategory, WardrobeItem
+from app.services import fashion_classifier
 
 logger = logging.getLogger(__name__)
 
@@ -15,7 +15,7 @@ class WardrobeService:
     """
     def __init__(self, db: Session):
         self.db = db
-        self.fashion_classifier = FashionClassifier()
+        self.fashion_classifier = fashion_classifier
 
     def process_and_add_item(self, user_id: str, filename: str) -> WardrobeItem:
         """

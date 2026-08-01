@@ -13,10 +13,14 @@ class UserRepository:
         self.db = db
 
     def get_user_by_id(self, user_id: str) -> Profile | None:
-        return self.db.scalars(select(Profile).where(Profile.id == user_id)).first()
+        try:
+            return self.db.scalars(select(Profile).where(Profile.id == user_id)).first()
+        except Exception:
+            self.db.rollback()
+            return None
 
     def get_user_profile(self, user_id: str) -> UserResponse:
-        profile = self.db.scalars(select(Profile).where(Profile.id == user_id)).first()
+        profile = self.get_user_by_id(user_id)
 
         if not profile:
             raise HTTPException(status_code=404, detail="Kullanıcı bulunamadı.")

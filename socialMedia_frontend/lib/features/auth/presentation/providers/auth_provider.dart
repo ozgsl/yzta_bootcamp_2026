@@ -28,7 +28,11 @@ class AuthProvider extends ChangeNotifier {
       final prefs = await SharedPreferences.getInstance();
       final savedId = prefs.getString(_kUserIdKey);
       if (savedId != null && savedId.isNotEmpty) {
-        _currentUserId = savedId;
+        if (savedId.startsWith('user-')) {
+          await _clearSession();
+        } else {
+          _currentUserId = savedId;
+        }
       }
     } catch (e) {
       debugPrint('Session yükleme hatası: $e');
