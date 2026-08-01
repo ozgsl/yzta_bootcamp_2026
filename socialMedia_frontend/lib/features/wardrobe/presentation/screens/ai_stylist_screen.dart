@@ -17,15 +17,17 @@ class _AiStylistScreenState extends ConsumerState<AiStylistScreen> {
   final ApiService _apiService = ApiService();
   final TextEditingController _messageController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
-  final List<Map<String, String>> _messages = [];
+  final List<Map<String, dynamic>> _messages = [];
+  List<Map<String, dynamic>> _sessions = [];
+  String? _currentSessionId;
   bool _isLoading = false;
-  bool _historyLoaded = false;
+  bool _historyLoaded = true; // initially true because new page is clean
   String? _weatherContext;
 
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _loadHistory());
+    WidgetsBinding.instance.addPostFrameCallback((_) => _loadSessions());
   }
 
   @override
@@ -35,17 +37,33 @@ class _AiStylistScreenState extends ConsumerState<AiStylistScreen> {
     super.dispose();
   }
 
-  Future<void> _loadHistory() async {
+  Future<void> _loadSessions() async {
+    final userId = ref.read(authProvider).currentUserId;
+    if (userId == null) return;
+    try {
+      final sessions = await _apiService.getChatSessions(userId);
+      if (mounted) {
+        setState(() {
+          _sessions = sessions;
+        });
+      }
+    } catch (e) {
+      // ignore
+    }
+  }
+
+  Future<void> _loadChatHistory(String sessionId) async {
     final userId = ref.read(authProvider).currentUserId;
     if (userId == null) return;
 
-    // Arka planda hava durumunu çek
-    WeatherService().getCurrentWeatherContext().then((weather) {
-      if (mounted) _weatherContext = weather;
+    if (mounted) setState(() {
+      _historyLoaded = false;
+      _currentSessionId = sessionId;
+      _messages.clear();
     });
 
     try {
-      final history = await _apiService.getChatHistory(userId);
+      final history = await _apiService.getChatHistory(userId, sessionId: sessionId);
       if (mounted && history.isNotEmpty) {
         setState(() {
           _messages.addAll(history);
@@ -54,7 +72,7 @@ class _AiStylistScreenState extends ConsumerState<AiStylistScreen> {
         _scrollToBottom();
       }
     } catch (e) {
-      // Geçmiş yüklenemezse boş başla
+      // ignore
     }
     if (mounted) setState(() => _historyLoaded = true);
   }
@@ -75,13 +93,19 @@ class _AiStylistScreenState extends ConsumerState<AiStylistScreen> {
 
     try {
       final response =
-          await _apiService.chat(userId, text, weather: _weatherContext);
+          await _apiService.chat(userId, text, weather: _weatherContext, sessionId: _currentSessionId);
       final aiText = response['asistan_mesaji']?.toString() ??
           response['reply']?.toString() ??
           'Yanıt üretilemedi.';
+      
+      final newSessionId = response['session_id']?.toString();
 
       setState(() {
-        _messages.add({'role': 'ai', 'text': aiText});
+        _messages.add({'role': 'ai', 'text': aiText, 'outfit_items': response['outfit_items']});
+        if (_currentSessionId == null && newSessionId != null) {
+          _currentSessionId = newSessionId;
+          _loadSessions();
+        }
       });
     } catch (e) {
       setState(() {
@@ -111,6 +135,54 @@ class _AiStylistScreenState extends ConsumerState<AiStylistScreen> {
 
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+      drawer: Drawer(
+        backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+        child: SafeArea(
+          child: Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Text(
+                  'Sohbet Geçmişi',
+                  style: Theme.of(context).textTheme.titleLarge,
+                ),
+              ),
+              ListTile(
+                leading: const Icon(Icons.add),
+                title: const Text('Yeni Sohbet'),
+                onTap: () {
+                  Navigator.pop(context);
+                  setState(() {
+                    _currentSessionId = null;
+                    _messages.clear();
+                  });
+                },
+              ),
+              const Divider(),
+              Expanded(
+                child: ListView.builder(
+                  itemCount: _sessions.length,
+                  itemBuilder: (context, index) {
+                    final session = _sessions[index];
+                    return ListTile(
+                      leading: const Icon(Icons.chat_bubble_outline, size: 20),
+                      title: Text(
+                        session['title']?.toString() ?? 'Eski Sohbet',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      onTap: () {
+                        Navigator.pop(context);
+                        _loadChatHistory(session['session_id']);
+                      },
+                    );
+                  },
+                ),
+              )
+            ],
+          ),
+        ),
+      ),
       appBar: AppBar(
         title: Row(
           children: [
@@ -244,8 +316,10 @@ class _AiStylistScreenState extends ConsumerState<AiStylistScreen> {
     );
   }
 
-  Widget _buildMessageBubble(Map<String, String> msg) {
+  Widget _buildMessageBubble(Map<String, dynamic> msg) {
     final isUser = msg['role'] == 'user';
+    final outfitItems = msg['outfit_items'] as List<dynamic>?;
+
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: Row(
@@ -279,16 +353,55 @@ class _AiStylistScreenState extends ConsumerState<AiStylistScreen> {
                   bottomRight: Radius.circular(isUser ? 4 : 18),
                 ),
               ),
-              child: Text(
-                msg['text'] ?? '',
-                style: TextStyle(
-                  color: isUser
-                      ? Colors.white
-                      : Theme.of(context).textTheme.bodyLarge?.color ??
-                          Colors.white,
-                  fontSize: 14,
-                  height: 1.4,
-                ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    msg['text']?.toString() ?? '',
+                    style: TextStyle(
+                      color: isUser
+                          ? Colors.white
+                          : Theme.of(context).textTheme.bodyLarge?.color ??
+                              Colors.white,
+                      fontSize: 14,
+                      height: 1.4,
+                    ),
+                  ),
+                  if (outfitItems != null && outfitItems.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 10),
+                      child: SizedBox(
+                        height: 100,
+                        child: ListView.builder(
+                          scrollDirection: Axis.horizontal,
+                          itemCount: outfitItems.length,
+                          itemBuilder: (context, idx) {
+                            final item = outfitItems[idx];
+                            final rawImgUrl = item['foto_url']?.toString() ?? item['image_url']?.toString() ?? '';
+                            final imgUrl = ApiService.fixImageUrl(rawImgUrl);
+                            
+                            return Container(
+                              width: 80,
+                              margin: const EdgeInsets.only(right: 8),
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(8),
+                                color: Theme.of(context).scaffoldBackgroundColor,
+                                image: imgUrl.isNotEmpty
+                                    ? DecorationImage(
+                                        image: NetworkImage(imgUrl),
+                                        fit: BoxFit.cover,
+                                      )
+                                    : null,
+                              ),
+                              child: imgUrl.isEmpty
+                                  ? const Icon(Icons.checkroom, color: Colors.grey)
+                                  : null,
+                            );
+                          },
+                        ),
+                      ),
+                    ),
+                ],
               ),
             ),
           ),

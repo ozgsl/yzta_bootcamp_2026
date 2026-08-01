@@ -11,6 +11,7 @@ import '../../../../services/api_service.dart';
 import '../../../../core/localization/locale_provider.dart';
 import '../../domain/models/color_model.dart';
 import '../widgets/clothing_color_picker.dart';
+import 'vton_screen.dart';
 
 class EditItemScreen extends ConsumerStatefulWidget {
   final Map<String, dynamic> initialItem;
@@ -505,6 +506,34 @@ class _EditItemScreenState extends ConsumerState<EditItemScreen> {
             ),
 
             const SizedBox(height: 32),
+
+            // ── VTON Butonu ──────────────────────────────
+            SizedBox(
+              width: double.infinity,
+              height: 50,
+              child: ElevatedButton.icon(
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => VtonScreen(clothItem: widget.initialItem),
+                    ),
+                  );
+                },
+                icon: const Icon(Icons.auto_fix_high),
+                label: Text(s.isTr ? 'Üzerimde Dene (VTON) 🪄' : 'Try On (VTON) 🪄'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Theme.of(context).colorScheme.secondary.withOpacity(0.2),
+                  foregroundColor: Theme.of(context).colorScheme.secondary,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  elevation: 0,
+                ),
+              ),
+            ),
+
+            const SizedBox(height: 16),
 
             // ── Sil Butonu ──────────────────────────────
             SizedBox(

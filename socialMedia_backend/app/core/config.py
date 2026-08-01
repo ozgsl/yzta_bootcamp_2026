@@ -14,8 +14,10 @@ _PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 
 
 class Settings(BaseSettings):
-    # Veritabanı: proje kökünde, platform bağımsız relative path
     DATABASE_PATH: str = str(_PROJECT_ROOT / "dijital_gardrop.db")
+    DATABASE_URL: str | None = None
+    TEST_DATABASE_URL: str | None = None
+    SUPABASE_URL: str | None = None
 
     # AI Servisleri
     GEMINI_API_KEY: str | None = None
@@ -44,7 +46,7 @@ class Settings(BaseSettings):
     def project_root(self) -> Path:
         return _PROJECT_ROOT
 
-    model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
+    model_config = {"env_file": ".env", "env_file_encoding": "utf-8", "extra": "ignore"}
 
 
 settings = Settings()

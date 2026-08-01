@@ -481,7 +481,7 @@ class _CreatePostScreenState extends ConsumerState<CreatePostScreen> {
                       ? 'Kıyafetler analiz ediliyor...'
                       : 'Öneri alınıyor...')
                   : (provider.selectedImage != null
-                      ? 'Kombini Analiz Et (LLaVA + AI)'
+                      ? 'Kombini Analiz Et (Moondream + AI)'
                       : 'AI Öneri Al'),
             ),
             style: OutlinedButton.styleFrom(
@@ -501,7 +501,7 @@ class _CreatePostScreenState extends ConsumerState<CreatePostScreen> {
           Padding(
             padding: const EdgeInsets.only(top: AppTheme.spacingXS),
             child: Text(
-              'LLaVA ile kıyafet tespiti → Ollama ile kombin açıklaması',
+              'Moondream ile kıyafet tespiti → Ollama ile kombin açıklaması',
               style: TextStyle(
                 color: (Theme.of(context).textTheme.bodySmall?.color ?? Colors.grey)
                     .withValues(alpha: 0.6),
@@ -528,7 +528,7 @@ class _CreatePostScreenState extends ConsumerState<CreatePostScreen> {
     return [
       const SizedBox(height: AppTheme.spacingXS),
       Text(
-        'LLaVA ile Tespit Edilen Kıyafetler:',
+        'Moondream ile Tespit Edilen Kıyafetler:',
         style: TextStyle(
           color: (Theme.of(context).textTheme.bodySmall?.color ?? Colors.grey)
               .withValues(alpha: 0.8),
@@ -636,13 +636,13 @@ class _CreatePostScreenState extends ConsumerState<CreatePostScreen> {
       height: 52,
       child: AnimatedOpacity(
         duration: const Duration(milliseconds: 200),
-        opacity: provider.isFormValid ? 1.0 : 0.5,
+        opacity: provider.isSubmitting ? 0.7 : 1.0,
         child: Container(
           decoration: AppTheme.gradientButtonDecoration(),
           child: Material(
             color: Colors.transparent,
             child: InkWell(
-              onTap: provider.isFormValid && !provider.isSubmitting
+              onTap: !provider.isSubmitting
                   ? () => _handleSubmit(provider)
                   : null,
               borderRadius: BorderRadius.circular(AppTheme.radiusRound),

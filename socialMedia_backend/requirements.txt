@@ -11,7 +11,7 @@ pyotp==2.9.0
 
 # FashionSigLIP
 torch>=2.8.0
-transformers==4.36.2
+transformers>=4.40.0   # Moondream2 uyumlu (4.40+ gerekli)
 open-clip-torch>=3.3.0
 Pillow>=10.0.0
 numpy>=1.24.0
@@ -23,3 +23,7 @@ alembic==1.13.1
 Faker==33.0.0
 passlib[bcrypt]
 python-jose[cryptography]
+
+
+# Moondream2 görsel model Ollama üzerinden çalışır — ek Python paketi gerektirmez.
+# Kurulum: ollama pull moondream  (~1.7GB, int4 quantized)

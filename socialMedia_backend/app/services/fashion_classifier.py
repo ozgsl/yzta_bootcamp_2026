@@ -87,6 +87,80 @@ MEVSIM_TR_MAP = {
     "winter": "kış", "all season": "tüm sezon",
 }
 
+# ── YENİ: Kullanıcının verdiği script ile birebir aynı 6 özellik seti ──────
+ATTRIBUTE_LABELS = {
+    "category": [
+        "t-shirt", "shirt", "blouse", "sweater", "hoodie",
+        "jacket", "coat", "jeans", "trousers", "shorts",
+        "skirt", "dress", "suit", "sneakers", "boots",
+        "sandals", "hat", "scarf", "bag",
+    ],
+    "color": [
+        "black", "white", "gray", "beige", "brown", "red", "orange",
+        "yellow", "green", "blue", "navy", "purple", "pink", "multicolor",
+    ],
+    "pattern": [
+        "solid / plain", "striped", "plaid / checkered", "floral",
+        "polka dot", "animal print", "graphic print", "geometric pattern",
+    ],
+    "material": [
+        "cotton", "denim", "wool", "leather", "linen", "silk",
+        "polyester / synthetic", "knit", "corduroy", "velvet",
+    ],
+    "season": [
+        "spring", "summer", "autumn", "winter", "all-season",
+    ],
+    "occasion": [
+        "casual everyday wear", "formal / office wear", "sportswear / athletic",
+        "party / evening wear", "loungewear", "outdoor / travel wear",
+    ],
+}
+
+# İngilizce → Türkçe çeviri haritaları (yeni özellikler)
+PATTERN_TR_MAP = {
+    "solid / plain": "düz", "striped": "çizgili", "plaid / checkered": "ekose",
+    "floral": "çiçekli", "polka dot": "puantiyeli", "animal print": "hayvan deseni",
+    "graphic print": "baskılı", "geometric pattern": "geometrik desen",
+}
+
+MATERIAL_TR_MAP = {
+    "cotton": "pamuk", "denim": "denim", "wool": "yün", "leather": "deri",
+    "linen": "keten", "silk": "ipek", "polyester / synthetic": "sentetik",
+    "knit": "triko", "corduroy": "fitilli kadife", "velvet": "kadife",
+}
+
+OCCASION_TR_MAP = {
+    "casual everyday wear": "günlük kullanım",
+    "formal / office wear": "resmi / iş",
+    "sportswear / athletic": "spor",
+    "party / evening wear": "parti / gece",
+    "loungewear": "ev kıyafeti",
+    "outdoor / travel wear": "dış mekan / seyahat",
+}
+
+# Geniş renk haritası (ATTRIBUTE_LABELS["color"] için)
+ATTR_COLOR_TR_MAP = {
+    "black": "siyah", "white": "beyaz", "gray": "gri", "beige": "bej",
+    "brown": "kahverengi", "red": "kırmızı", "orange": "turuncu",
+    "yellow": "sarı", "green": "yeşil", "blue": "mavi", "navy": "lacivert",
+    "purple": "mor", "pink": "pembe", "multicolor": "çok renkli",
+}
+
+# Geniş kategori haritası (ATTRIBUTE_LABELS["category"] için)
+ATTR_CATEGORY_TR_MAP = {
+    "t-shirt": "tişört", "shirt": "gömlek", "blouse": "bluz",
+    "sweater": "kazak", "hoodie": "hoodie", "jacket": "ceket",
+    "coat": "mont", "jeans": "jean", "trousers": "pantolon",
+    "shorts": "şort", "skirt": "etek", "dress": "elbise",
+    "suit": "takım elbise", "sneakers": "spor ayakkabı", "boots": "bot",
+    "sandals": "sandalet", "hat": "şapka", "scarf": "eşarp", "bag": "çanta",
+}
+
+ATTR_SEASON_TR_MAP = {
+    "spring": "ilkbahar", "summer": "yaz", "autumn": "sonbahar",
+    "winter": "kış", "all-season": "tüm sezon",
+}
+
 # post_outfit_items.category CHECK constraint değerleri
 UST_KATEGORILER = {
     "üst giyim": ["t-shirt", "shirt", "blouse", "sweater", "cardigan", "sweatshirt", "hoodie", "blazer", "vest"],
@@ -105,6 +179,7 @@ POST_CATEGORY_MAP = {
     "ayakkabı": "ayakkabı",
     "aksesuar": "aksesuar",
 }
+
 
 
 # ---------------------------------------------------------------------------
@@ -293,6 +368,72 @@ class FashionClassifier:
 
         except Exception as exc:
             logger.error(f"[FashionSigLIP] Sınıflandırma hatası: {exc}")
+            return {"success": False, "error": str(exc)}
+
+    # -----------------------------------------------------------------------
+    # YENİ: Tüm özellik gruplarını sınıflandır (kullanıcının script'i ile aynı)
+    # -----------------------------------------------------------------------
+
+    def classify_all_attributes(
+        self,
+        image_path: Optional[Path] = None,
+        image_b64: Optional[str] = None,
+        image_bytes: Optional[bytes] = None,
+    ) -> dict:
+        """
+        Kıyafetin 6 özelliğini FashionSigLIP ile sıfır-atış sınıflandırmasıyla belirler:
+        category, color, pattern, material, season, occasion.
+
+        Her özellik için:
+            best      → en yüksek skorlu etiket (Türkçe)
+            best_en   → İngilizce orijinal (Moondream prompt için)
+            confidence → float 0-1
+            top_3     → liste
+
+        Hata durumunda {"success": False, "error": ...} döner.
+        """
+        if not self.is_ready:
+            return {"success": False, "error": f"Model yüklü değil: {self._load_error}"}
+
+        try:
+            image = self._load_pil_image(image_path, image_b64, image_bytes)
+            result: dict = {"success": True}
+
+            TR_MAPS = {
+                "category": ATTR_CATEGORY_TR_MAP,
+                "color":    ATTR_COLOR_TR_MAP,
+                "pattern":  PATTERN_TR_MAP,
+                "material": MATERIAL_TR_MAP,
+                "season":   ATTR_SEASON_TR_MAP,
+                "occasion": OCCASION_TR_MAP,
+            }
+
+            for attr_name, labels in ATTRIBUTE_LABELS.items():
+                top = self._top_label(image, labels, top_k=3)
+                best_en = top[0]["label"]
+                tr_map  = TR_MAPS.get(attr_name, {})
+                best_tr = tr_map.get(best_en, best_en)
+
+                result[attr_name] = {
+                    "best":       best_tr,
+                    "best_en":    best_en,
+                    "confidence": round(top[0]["score"], 3),
+                    "top_3": [
+                        {"label": tr_map.get(r["label"], r["label"]),
+                         "label_en": r["label"],
+                         "score": round(r["score"], 3)}
+                        for r in top
+                    ],
+                }
+
+            # post_category ek bilgi
+            cat_en = result["category"]["best_en"]
+            result["post_category"] = _tur_to_post_category(cat_en)
+
+            return result
+
+        except Exception as exc:
+            logger.error(f"[FashionSigLIP] classify_all_attributes hatası: {exc}")
             return {"success": False, "error": str(exc)}
 
 

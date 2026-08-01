@@ -235,4 +235,184 @@ Geliştirme sürecinde karşılaşılan teknik engeller sistematik olarak aşıl
 - Ollama Team, "Ollama," 2024. https://ollama.com
 - R. Rousselet, "Riverpod," 2024. https://riverpod.dev
 - D. R. Hipp, "SQLite," 2024. https://sqlite.org
-- Meta AI, "Llama 3," Meta Platforms, 2024.
+
+---
+
+## 🚀 Projeyi Çalıştırma
+
+### Ön Gereksinimler
+
+| Araç | Sürüm | Kurulum |
+|------|-------|---------|
+| Python | 3.9+ | `brew install python` / `apt install python3` |
+| Flutter | 3.10+ | https://flutter.dev/docs/get-started/install |
+| Ollama | Latest | `curl -fsSL https://ollama.com/install.sh \| sh` |
+| Git | Latest | `brew install git` / `apt install git` |
+
+### 1. Ollama Modellerini İndirin
+
+```bash
+# Ollama sunucusunu başlatın (ayrı bir terminalde çalışmalı)
+ollama serve
+
+# Gerekli modelleri indirin
+ollama pull moondream      # Görsel analiz (kıyafet tanıma, caption)
+ollama pull llama3.2       # Metin tabanlı AI stilist sohbeti
+
+# Modelleri kontrol edin
+ollama list
+```
+
+### 2. Backend (FastAPI) Kurulumu
+
+```bash
+cd socialMedia_backend
+
+# Sanal ortam oluşturun ve aktif edin
+python3 -m venv venv
+source venv/bin/activate  # Windows: venv\Scripts\activate
+
+# Bağımlılıkları yükleyin
+pip install --upgrade pip
+pip install -r requirements.txt
+
+# Veritabanını başlatın
+python -c "from app.core.database import init_db; init_db()"
+
+# Backend'i başlatın (0.0.0.0 ile ağ erişimi açık)
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+```
+
+**Backend doğrulama:**
+- API: http://localhost:8000
+- Swagger Docs: http://localhost:8000/docs
+- Health Check: http://localhost:8000/ (JSON döner)
+
+### 3. Frontend (Flutter) Kurulumu
+
+```bash
+cd socialMedia_frontend
+
+# Bağımlılıkları yükleyin
+flutter pub get
+
+# API base URL'yi ayarlayın (lib/core/api/api_service.dart)
+# iOS Simulator: http://localhost:8000
+# Android Emulator: http://10.0.2.2:8000
+# Fiziksel cihaz: http://<BILGISAYAR_IP>:8000
+
+# Uygulamayı çalıştırın
+flutter devices          # Mevcut cihazları listele
+flutter run -d <device_id>
+```
+
+**Hızlı başlatma örnekleri:**
+```bash
+# iOS Simulator
+flutter run -d ios
+
+# Android Emulator
+flutter run -d android
+
+# Chrome (Web)
+flutter run -d chrome
+```
+
+### 4. İki Terminle Eşzamanlı Çalıştırma
+
+**Terminal 1 - Backend + Ollama:**
+```bash
+# Terminal 1a: Ollama
+ollama serve
+
+# Terminal 1b: Backend
+cd socialMedia_backend
+source venv/bin/activate
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+```
+
+**Terminal 2 - Frontend:**
+```bash
+cd socialMedia_frontend
+flutter run -d <device_id>
+```
+
+### 5. Yaygın Sorunlar ve Çözümler
+
+| Sorun | Çözüm |
+|-------|-------|
+| `ModuleNotFoundError: torch` | `pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu` |
+| `Ollama connection refused` | `ollama serve` çalışıyor mu kontrol edin |
+| Android'de `Connection refused` | `baseUrl = 'http://10.0.2.2:8000'` kullanın |
+| iOS'ta `Connection refused` | `baseUrl = 'http://<MAC_IP>:8000'` kullanın (localhost değil) |
+| Veritabanı kilitli | `rm socialMedia_backend/dijital_gardrop.db` ve yeniden başlatın |
+| CORS hatası | `.env` dosyasında `CORS_ORIGINS` kontrol edin |
+
+### 6. Test Etme
+
+```bash
+# Backend testleri
+cd socialMedia_backend
+source venv/bin/activate
+pytest app/tests/ -v
+
+# Frontend testleri
+cd socialMedia_frontend
+flutter test
+
+# API manuel test
+curl http://localhost:8000/
+curl http://localhost:8000/docs
+```
+
+---
+
+## 📁 Proje Yapısı Özeti
+
+```
+yzta_bootcamp_2026/
+├── README.md                    # Bu dosya
+├── SETUP_GUIDE.md              # Detaylı kurulum rehberi
+├── socialMedia_backend/        # FastAPI Backend
+│   ├── app/
+│   │   ├── main.py             # FastAPI entry point
+│   │   ├── api/routers/        # API endpoint'leri
+│   │   ├── core/               # Config, DB, Email
+│   │   ├── domain/schemas.py   # Pydantic modelleri
+│   │   ├── repositories/       # Veritabanı erişimi
+│   │   ├── services/           # AI, Storage, Auth
+│   │   └── tests/              # Pytest testleri
+│   ├── requirements.txt
+│   └── migrate.py
+├── socialMedia_frontend/       # Flutter Frontend
+│   ├── lib/
+│   │   ├── core/               # API, Theme, Router
+│   │   ├── features/           # Feature modülleri
+│   │   │   ├── auth/
+│   │   │   ├── feed/
+│   │   │   ├── wardrobe/
+│   │   │   ├── ai_stylist/
+│   │   │   ├── profile/
+│   │   │   └── ...
+│   │   └── main.dart
+│   ├── pubspec.yaml
+│   └── test/
+└── docs/
+    └── privacy_checklist.md
+```
+
+---
+
+## 📝 Notlar
+
+- **Ollama** ayrı bir terminalde `ollama serve` ile çalışmalıdır
+- **İlk AI isteği** model RAM'e yüklendiği için 10-30 saniye sürebilir, sonraki istekler hızlıdır
+- **Geliştirme modunda** backend `--reload` ile kod değişikliklerinde otomatik yenilenir
+- **Veritabanı** SQLite (`dijital_gardrop.db`) dosya tabanlıdır, silip yeniden oluşturabilirsiniz
+- **Detaylı kurulum** için `SETUP_GUIDE.md` dosyasına bakın
+
+---
+
+*Son güncelleme: 2026*  
+*Proje: Dijital Gardrop - AI-Powered Social Fashion Platform*  
+*YZTA Bootcamp 2026 - Takım 35*

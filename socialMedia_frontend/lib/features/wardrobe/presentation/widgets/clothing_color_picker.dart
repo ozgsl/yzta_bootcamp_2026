@@ -27,29 +27,49 @@ class _ClothingColorPickerState extends State<ClothingColorPicker> {
     _initFromInitialColor();
   }
 
+  @override
+  void didUpdateWidget(ClothingColorPicker oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.initialColor != oldWidget.initialColor) {
+      setState(() {
+        _initFromInitialColor();
+      });
+    }
+  }
+
   void _initFromInitialColor() {
     if (widget.initialColor != null) {
       final initial = widget.initialColor!;
       
       if (initial.parentCategoryId == 'ozel') {
         _customColor = _colorFromHex(initial.hexCode);
+        _selectedMainColor = null;
+        _selectedSubColor = null;
         return;
       }
       
       try {
         _selectedMainColor = clothingColors.firstWhere(
             (c) => c.id == initial.parentCategoryId);
+        _customColor = null;
+        
         if (_selectedMainColor != null && _selectedMainColor!.subColors.isNotEmpty) {
           try {
             _selectedSubColor = _selectedMainColor!.subColors.firstWhere(
                 (sc) => sc.hex.toUpperCase() == initial.hexCode.toUpperCase());
           } catch (e) {
-            // Not found in subcolors
+            _selectedSubColor = null;
           }
+        } else {
+          _selectedSubColor = null;
         }
       } catch (e) {
         // Not a standard main color category
       }
+    } else {
+      _selectedMainColor = null;
+      _selectedSubColor = null;
+      _customColor = null;
     }
   }
 

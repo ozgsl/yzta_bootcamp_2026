@@ -10,6 +10,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
+from app.core.config import settings
 from app.api.routers import (
     analytics,
     auth,
@@ -21,11 +22,10 @@ from app.api.routers import (
     search,
     users,
     wardrobe,
+    vton,
 )
 from app.models.base import Base, engine
 from app.models.outfit import *
-
-# Import all models to ensure they are registered before create_all
 from app.models.social import *
 from app.models.wardrobe import *
 from app.services.fashion_classifier import load_model_on_startup
@@ -33,8 +33,8 @@ from app.services.ollama_caption_service import (
     OLLAMA_BASE_URL,
     OLLAMA_TEXT_MODEL,
     OLLAMA_VISION_MODEL,
+    router as captions_router,
 )
-from app.services.ollama_caption_service import router as captions_router
 
 STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
 STATIC_DIR.mkdir(exist_ok=True)
@@ -43,31 +43,31 @@ STATIC_DIR.mkdir(exist_ok=True)
 
 async def _warmup_ollama_models():
     """
-    Backend başladıktan sonra arka planda LLaVA ve llama3.2'yi belleğe yükler.
-    keep_alive=10m ile model 10 dakika bellekte kalır — sonraki istekler hızlı olur.
+    Backend başladıktan sonra arka planda Moondream2 ve llama3.2'yi belleğe yükler.
+    keep_alive=10m → model 10 dakika bellekte kalır — sonraki istekler hızlı olur.
     """
     import asyncio
-
     import httpx
 
-    await asyncio.sleep(4)  # Backend tamamen başlayana kadar bekle
+    await asyncio.sleep(4)  # Backend tamamen başlamayana kadar bekle
 
     async with httpx.AsyncClient(timeout=120.0) as client:
-        # LLaVA warm-up
+        # Moondream2 warm-up — sadece modeli RAM'e yükle (görüntüsüz)
+        # NOT: keep_alive kullanmıyoruz — görüntülü isteklerde context cache sorununa yol açıyordu
         try:
             await client.post(
                 f"{OLLAMA_BASE_URL}/api/generate",
                 json={
                     "model": OLLAMA_VISION_MODEL,
-                    "prompt": "Hi",
+                    "prompt": "hi",
                     "stream": False,
-                    "keep_alive": "10m",
+                    "keep_alive": "0",   # Context cache'ini sıfırla
                     "options": {"num_predict": 1},
                 },
             )
-            print(f"[Warm-up] ✅ LLaVA ({OLLAMA_VISION_MODEL}) belleğe yüklendi.")
+            print(f"[Warm-up] ✅ Moondream2 ({OLLAMA_VISION_MODEL}) belleğe yüklendi.")
         except Exception as e:
-            print(f"[Warm-up] ⚠️ LLaVA yüklenemedi: {e}")
+            print(f"[Warm-up] ⚠️ Moondream2 yüklenemedi: {e}")
 
         # llama3.2 warm-up
         try:
@@ -88,13 +88,13 @@ async def _warmup_ollama_models():
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Uygulama başlatılırken veritabanını oluşturur, FashionSigLIP ve LLaVA modellerini ön-ısıtır."""
-    pass  # Base.metadata.create_all(bind=engine)
+    """Uygulama başlatılırken veritabanı şemasını doğrular, FashionSigLIP ve Moondream modellerini ön-ısıtır."""
+    pass  # Alembic ve seed scriptleri tarafından veritabanı yönetiliyor
     import asyncio
     loop = asyncio.get_event_loop()
     # FashionSigLIP — Kıyafet sınıflandırma modelini bellekte hazırla
     await loop.run_in_executor(None, load_model_on_startup)
-    # LLaVA + Ollama — Arka planda modelleri belleğe yükle (warm-up)
+    # Moondream + Ollama — Arka planda modelleri belleğe yükle (warm-up)
     asyncio.create_task(_warmup_ollama_models())
     yield
 
@@ -129,6 +129,7 @@ app.include_router(search.router,    prefix="/search",      tags=["Search"])
 app.include_router(wardrobe.router,  prefix="/wardrobe", tags=["Wardrobe"])
 app.include_router(notifications.router, prefix="/notifications", tags=["Notifications"])
 app.include_router(analytics.router,      prefix="/analytics",      tags=["Analytics"])
+app.include_router(vton.router, prefix="/wardrobe/vton", tags=["Wardrobe - VTON"])
 app.include_router(captions_router,  prefix="/captions", tags=["Captions"])
 
 
