@@ -28,7 +28,6 @@ from app.models.base import Base, engine
 from app.models.outfit import *
 from app.models.social import *
 from app.models.wardrobe import *
-from app.services.fashion_classifier import load_model_on_startup
 from app.services.ollama_caption_service import (
     OLLAMA_BASE_URL,
     OLLAMA_TEXT_MODEL,
@@ -89,12 +88,22 @@ async def _warmup_ollama_models():
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Uygulama başlatılırken veritabanı şemasını anında kurur ve Cloud Run zaman aşımını önler."""
+    import os
     from app.models.base import Base, engine
     try:
         Base.metadata.create_all(bind=engine)
         print("[Startup] Veritabanı tabloları hazırlandı.")
     except Exception as e:
         print(f"[Startup] Veritabanı uyarısı: {e}")
+    # PyTorch modelini sadece lokal ortamda yükle (Cloud Run'da atla)
+    if "K_SERVICE" not in os.environ:
+        try:
+            from app.services.fashion_classifier import load_model_on_startup
+            import asyncio
+            loop = asyncio.get_event_loop()
+            await loop.run_in_executor(None, load_model_on_startup)
+        except Exception as e:
+            print(f"[Startup] Fashion model atlandı: {e}")
     yield
 
 
