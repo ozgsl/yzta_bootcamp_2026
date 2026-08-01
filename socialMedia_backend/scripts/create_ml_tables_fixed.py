@@ -1,4 +1,5 @@
 import sqlite3
+
 conn = sqlite3.connect('dijital_gardrop.db')
 sql = '''
 CREATE TABLE IF NOT EXISTS kategoriler (

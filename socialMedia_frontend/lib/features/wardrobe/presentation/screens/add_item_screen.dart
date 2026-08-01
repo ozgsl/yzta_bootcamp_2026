@@ -48,6 +48,7 @@ class _AddItemScreenState extends ConsumerState<AddItemScreen> {
     'Sneaker',
     'Çanta',
     'Aksesuar',
+    'Eşarp',
     'Diğer',
   ];  static const _mevsimler = ['Yaz', 'Kış', 'İlkbahar', 'Sonbahar', 'Tüm Sezon'];
 

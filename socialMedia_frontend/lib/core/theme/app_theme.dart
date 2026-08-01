@@ -81,6 +81,8 @@ class AppTheme {
         shadowColor: Colors.black.withValues(alpha: 0.3),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       ),
+      splashColor: accentViolet.withValues(alpha: 0.2),
+      highlightColor: accentPink.withValues(alpha: 0.1),
       useMaterial3: true,
     );
   }
@@ -114,6 +116,8 @@ class AppTheme {
         shadowColor: const Color(0xFF1E1A29).withValues(alpha: 0.05),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       ),
+      splashColor: accentPurple.withValues(alpha: 0.15),
+      highlightColor: accentPink.withValues(alpha: 0.1),
       useMaterial3: true,
     );
   }

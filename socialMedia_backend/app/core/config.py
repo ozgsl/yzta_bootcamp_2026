@@ -6,8 +6,8 @@ Tüm yollar Path(__file__) ile hesaplanır — platform bağımsızdır (Mac/Win
 """
 
 from pathlib import Path
+
 from pydantic_settings import BaseSettings
-from typing import Optional
 
 # Proje kökü: config.py → core → app → socialMedia_backend
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
@@ -18,9 +18,9 @@ class Settings(BaseSettings):
     DATABASE_PATH: str = str(_PROJECT_ROOT / "dijital_gardrop.db")
 
     # AI Servisleri
-    GEMINI_API_KEY: Optional[str] = None
+    GEMINI_API_KEY: str | None = None
     GEMINI_MODEL: str = "gemini-2.5-flash"
-    FIREBASE_BUCKET: Optional[str] = None
+    FIREBASE_BUCKET: str | None = None
 
     # CORS — geliştirme ortamında tüm yerel ağlara izin ver
     CORS_ORIGINS: str = (

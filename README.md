@@ -3,11 +3,17 @@
 **Yapay Zeka Destekli Moda Sosyal Medya Platformu**
 
 > YZTA Bootcamp 2026 — Takım 35 Proje Raporu
-> Ahmet Colak
 
-Dijital Gardrop; kullanıcıların dijital gardıroplarını yönetmelerine, yapay zeka destekli kombin önerileri almalarına ve moda içeriklerini paylaşmalarına olanak tanıyan bir mobil platformdur. Sistem; **Flutter** tabanlı çok platformlu mobil istemci, **FastAPI** tabanlı RESTful arka uç ve yerel olarak çalışan **Ollama/LLaMA 3.2** dil modeli üçlüsünden oluşmaktadır.
+### Proje Ekibi (Takım 35)
+Projemiz 4 kişilik bir ekip tarafından yürütülmektedir:
+- **Scrum Master & Branding**
+- **Project Manager & AI (Yapay Zeka)**
+- **Developer (Geliştirici)**
+- **Marketing Researcher & Business Analyst (İş Analisti)**
 
-Bu README, 4 Temmuz 2026 tarihli güncel gorev günlüğü (task log) ve sprint burndown verilerine dayanmaktadır.
+Dijital Gardrop; kullanıcıların dijital gardıroplarını yönetmelerine, yapay zeka destekli kombin önerileri almalarına ve moda içeriklerini paylaşmalarına olanak tanıyan bir mobil platformdur. Sistem; **Flutter** tabanlı çok platformlu mobil istemci, **FastAPI** ve **PostgreSQL (Supabase)** tabanlı RESTful arka uç ve **Ollama/LLaMA 3.2** dil modeli üçlüsünden oluşmaktadır.
+
+Bu README, güncel görev günlüğü (task log) ve geliştirme verilerine dayanmaktadır.
 
 ---
 

@@ -1,151 +1,115 @@
 from __future__ import annotations
-from typing import Optional, Union
-"""
-AI Eğitim Verisi Export Batch Job
-=================================
-Günde 1 kez çalışan batch/cron job.
-Standalone: python -m app.services.ai_export
-"""
 
 import json
 import logging
-import os
-import sqlite3
-import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+
+from app.models.base import engine
+from app.models.outfit import OutfitItem
+from app.models.social import Post, TrainingDataExport
+
 logger = logging.getLogger(__name__)
 
-# Proje kök dizini (backend/)
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
-DB_PATH = BASE_DIR / "dijital_gardrop.db"
-SCHEMA_PATH = BASE_DIR / "schema.sql"
 EXPORTS_DIR = BASE_DIR / "exports"
 
-# ── SQL: Tüm filtreleme veritabanı seviyesinde ──────────────────────────
-EXPORT_QUERY = """\
-SELECT p.post_id,
-       p.image_url,
-       p.created_at,
-       poi.item_id,
-       poi.category,
-       poi.image_url AS item_image_url
-FROM   posts p
-LEFT JOIN post_outfit_items poi ON p.post_id = poi.post_id
-WHERE  p.ai_training_consent = 1
-  AND  p.visibility != 'private'
-  AND  p.post_id NOT IN (SELECT post_id FROM training_data_export)
-ORDER BY p.created_at ASC
-"""
-
-INSERT_EXPORT = """\
-INSERT INTO training_data_export (export_id, post_id, export_data, exported_at)
-VALUES (?, ?, ?, ?)
-"""
-
-
-def _get_connection(db_path: Optional[Union[str, Path]] = None) -> sqlite3.Connection:
-    """Veritabanı bağlantısı oluşturur."""
-    path = str(db_path or DB_PATH)
-    conn = sqlite3.connect(path)
-    conn.execute("PRAGMA foreign_keys = ON")
-    conn.row_factory = sqlite3.Row
-    return conn
-
-
-def _build_post_records(rows: list[sqlite3.Row]) -> list[dict]:
+def _build_post_records(db: Session, posts: list[Post]) -> list[dict]:
     """
-    Ham SQL satırlarını post bazında gruplayarak JSON sözleşmesine
-    uygun kayıtlara dönüştürür.
+    SQLAlchemy modellerini kullanarak JSON sözleşmesine uygun kayıtlara dönüştürür.
     """
-    posts: dict[str, dict] = {}
-
-    for row in rows:
-        pid = row["post_id"]
-        if pid not in posts:
-            posts[pid] = {
-                "post_id": pid,
-                "image_url": row["image_url"],
-                "outfit_items": [],
-                "created_at": row["created_at"],
-            }
-        # LEFT JOIN sonucu item_id NULL olabilir
-        if row["item_id"] is not None:
-            posts[pid]["outfit_items"].append(
-                {
-                    "item_id": row["item_id"],
-                    "category": row["category"],
-                    "image_url": row["item_image_url"],
-                }
-            )
-
-    return list(posts.values())
+    records = []
+    
+    for post in posts:
+        record = {
+            "post_id": str(post.id),
+            "image_url": post.image_url,
+            "outfit_items": [],
+            "created_at": post.created_at.isoformat() if post.created_at else None,
+        }
+        
+        if post.outfit_id:
+            outfit_items = db.scalars(select(OutfitItem).where(OutfitItem.outfit_id == post.outfit_id)).all()
+            for oi in outfit_items:
+                if oi.item and oi.item.subcategory and oi.item.subcategory.category:
+                    cat_name = oi.item.subcategory.category.name
+                else:
+                    cat_name = "Unknown"
+                    
+                record["outfit_items"].append({
+                    "item_id": str(oi.item_id),
+                    "category": cat_name,
+                    "image_url": oi.item.storage_path if oi.item else None
+                })
+        
+        records.append(record)
+        
+    return records
 
 
 def run_export(
-    conn: Optional[sqlite3.Connection] = None,
-    exports_dir: Optional[Path] = None,
+    db: Session | None = None,
+    exports_dir: Path | None = None,
 ) -> list[dict]:
     """
     Ana export fonksiyonu.
-
-    1. SQL ile consent=true & visibility!=private & henüz export edilmemiş
-       postları çeker.
-    2. Her postu JSON sözleşmesine dönüştürür.
-    3. training_data_export tablosuna kaydeder.
-    4. exports/ dizinine JSON dosyası yazar.
-
-    Returns:
-        Export edilen post kayıtlarının listesi.
     """
-    own_conn = conn is None
-    if own_conn:
-        conn = _get_connection()
-
+    own_session = db is None
+    session = db or Session(engine)
+    
     target_dir = exports_dir or EXPORTS_DIR
-
+    
     try:
-        cursor = conn.execute(EXPORT_QUERY)
-        rows = cursor.fetchall()
-
-        if not rows:
+        # Get posts that have consent, are not private, and are not in TrainingDataExport
+        subq = select(TrainingDataExport.post_id)
+        query = select(Post).where(
+            Post.ai_training_consent == True,
+            Post.visibility != 'private',
+            Post.id.not_in(subq)
+        ).order_by(Post.created_at.asc())
+        
+        posts = session.scalars(query).all()
+        
+        if not posts:
             logger.info("Export edilecek yeni post bulunamadı.")
             return []
-
-        records = _build_post_records(rows)
-        now_iso = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
-
-        # ── training_data_export tablosuna yaz ──────────────────────
+            
+        records = _build_post_records(session, posts)
+        
+        # Insert into TrainingDataExport
+        exports_to_add = []
         for rec in records:
-            export_id = str(uuid.uuid4())
-            conn.execute(
-                INSERT_EXPORT,
-                (export_id, rec["post_id"], json.dumps(rec, ensure_ascii=False), now_iso),
-            )
-        conn.commit()
-
-        # ── JSON dosyasına yaz ──────────────────────────────────────
+            exports_to_add.append(TrainingDataExport(
+                post_id=rec["post_id"],
+                export_data=rec
+            ))
+            
+        session.add_all(exports_to_add)
+        session.commit()
+        
+        # Write to JSON file
         target_dir.mkdir(parents=True, exist_ok=True)
         today_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
         file_path = target_dir / f"training_export_{today_str}.json"
         with open(file_path, "w", encoding="utf-8") as fp:
             json.dump(records, fp, ensure_ascii=False, indent=2)
-
+            
         logger.info(
             "Export tamamlandı: %d post işlendi → %s", len(records), file_path
         )
         return records
-
+        
     except Exception:
         logger.exception("Export sırasında hata oluştu.")
+        session.rollback()
         raise
     finally:
-        if own_conn:
-            conn.close()
+        if own_session:
+            session.close()
 
-
-# ── Standalone çalıştırma ───────────────────────────────────────────────
 if __name__ == "__main__":
     logging.basicConfig(
         level=logging.INFO,

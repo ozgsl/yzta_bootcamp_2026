@@ -1,6 +1,7 @@
-import requests
-import uuid
 import sys
+import uuid
+
+import requests
 
 BASE_URL = "http://localhost:8001"
 
@@ -51,9 +52,9 @@ def check_server():
     except requests.exceptions.ConnectionError:
         pass
     print(f"{RED}✗ Backend'e bağlanılamadı!{RESET}")
-    print(f"  Önce şunu çalıştır:")
-    print(f"  cd socialMedia_backend")
-    print(f"  python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload")
+    print("  Önce şunu çalıştır:")
+    print("  cd socialMedia_backend")
+    print("  python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload")
     return False
 
 
@@ -475,7 +476,8 @@ def test_ai_ml(user_id):
 
     # 12b. /captions/upload — dosya yükle + otomatik analiz
     # Test için küçük bir PNG oluştur (gerçek görsel olmadan da test edilebilir)
-    import io as _io, struct
+    import io as _io
+    import struct
     # 1x1 beyaz PNG
     png_header = b'\x89PNG\r\n\x1a\n'
     ihdr = struct.pack('>IIBBBBB', 1, 1, 8, 2, 0, 0, 0)
@@ -496,7 +498,7 @@ def test_ai_ml(user_id):
         if ai:
             ok(f"POST /captions/upload → URL OK + AI: {ai.get('tur','?')}/{ai.get('renk','?')}")
         else:
-            ok(f"POST /captions/upload → URL OK (AI analiz yok — model yüklü değil)")
+            ok("POST /captions/upload → URL OK (AI analiz yok — model yüklü değil)")
         uploaded_url = url
     else:
         fail("POST /captions/upload", r2.text[:200])
@@ -600,7 +602,7 @@ def test_cleanup(user_id, user_id_b=None, post_id=None):
 # ─────────────────────────────────────────────────────────
 def main():
     print(f"\n{'='*60}")
-    print(f"  DİJİTAL GARDROP — TAM API TEST SÜİTİ")
+    print("  DİJİTAL GARDROP — TAM API TEST SÜİTİ")
     print(f"  Backend: {BASE_URL}")
     print(f"{'='*60}")
 
@@ -635,7 +637,7 @@ def main():
 
     total = passed + failed + skipped
     print(f"\n{'='*60}")
-    print(f"  SONUÇ")
+    print("  SONUÇ")
     print(f"{'='*60}")
     print(f"  Toplam   : {total}")
     print(f"  {GREEN}Başarılı : {passed}{RESET}")

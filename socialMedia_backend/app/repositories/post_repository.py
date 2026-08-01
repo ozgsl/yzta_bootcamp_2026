@@ -1,132 +1,186 @@
+from __future__ import annotations
 
-import sqlite3
-import uuid
 from fastapi import HTTPException
-from app.domain.schemas import PostCreate, PostResponse, OutfitItemResponse, CommentResponse, MessageResponse
+from sqlalchemy import and_, or_, select
+from sqlalchemy.orm import Session
 
-
-def _ensure_active_title_column(db: sqlite3.Connection):
-    """active_title kolonu yoksa ekler (eski veritabanı uyumluluğu)."""
-    try:
-        db.execute("SELECT active_title FROM users LIMIT 1")
-    except sqlite3.OperationalError:
-        try:
-            db.execute("ALTER TABLE users ADD COLUMN active_title TEXT DEFAULT NULL")
-            db.commit()
-        except Exception:
-            pass
+from app.domain.schemas import (
+    MessageResponse,
+    OutfitItemResponse,
+    PostCreate,
+    PostResponse,
+)
+from app.models.outfit import Outfit, OutfitItem
+from app.models.social import Follow, Like, Post, Profile, Save
+from app.models.wardrobe import WardrobeItem
 
 
 class PostRepository:
-    @staticmethod
-    def create_post(db: sqlite3.Connection, post: PostCreate) -> MessageResponse:
-        _ensure_active_title_column(db)
-        post_id = str(uuid.uuid4())
-        user = db.execute('SELECT user_id FROM users WHERE user_id = ?', (post.user_id,)).fetchone()
-        if not user:
+    def __init__(self, db: Session):
+        self.db = db
+
+    def create_post(self, post: PostCreate) -> MessageResponse:
+        profile = self.db.scalars(select(Profile).where(Profile.id == post.user_id)).first()
+        if not profile:
             raise HTTPException(status_code=404, detail='Kullanıcı bulunamadı')
 
-        db.execute(
-            'INSERT INTO posts (post_id, user_id, image_url, caption, visibility, ai_training_consent) VALUES (?, ?, ?, ?, ?, ?)',
-            (post_id, post.user_id, post.image_url, post.caption, post.visibility, int(post.ai_training_consent))
+        new_post = Post(
+            user_id=post.user_id,
+            image_url=post.image_url,
+            content=post.caption,
+            visibility=post.visibility,
+            ai_training_consent=post.ai_training_consent
         )
+        self.db.add(new_post)
+        self.db.commit()
+        self.db.refresh(new_post)
 
         if post.outfit_items:
+            # Conceptually, post outfit items could be saved in an Outfit structure linked to this post.
+            # Assuming outfit_id is used or we create a new outfit for the post.
+            outfit = Outfit(
+                user_id=post.user_id,
+                description=f"Post {new_post.id} Outfit",
+                context_json='{"etkinlik": "Post"}'
+            )
+            self.db.add(outfit)
+            self.db.commit()
+            
             for item_id in post.outfit_items:
-                db.execute(
-                    'INSERT INTO post_outfit_items (post_id, item_id, category, image_url) VALUES (?, ?, ?, ?)',
-                    (post_id, item_id, 'diğer', None)
-                )
-        db.commit()
-        return MessageResponse(success=True, message='Post başarıyla oluşturuldu', data={"post_id": post_id})
+                oi = OutfitItem(outfit_id=outfit.id, item_id=item_id)
+                self.db.add(oi)
+            self.db.commit()
+            
+            new_post.outfit_id = str(outfit.id)
+            self.db.commit()
 
-    @staticmethod
-    def _build_post_response(db, row, viewer_id=None):
-        """Tek bir post satırını PostResponse'a çevirir."""
+        return MessageResponse(success=True, message='Post başarıyla oluşturuldu', data={"post_id": str(new_post.id)})
+
+    def _build_post_response(self, post: Post, profile: Profile, viewer_id: str | None = None) -> PostResponse:
         is_liked = False
         is_saved = False
         if viewer_id:
-            is_liked = db.execute(
-                'SELECT 1 FROM likes WHERE post_id = ? AND user_id = ?',
-                (row['post_id'], viewer_id)
-            ).fetchone() is not None
-            try:
-                is_saved = db.execute(
-                    'SELECT 1 FROM saved_posts WHERE post_id = ? AND user_id = ?',
-                    (row['post_id'], viewer_id)
-                ).fetchone() is not None
-            except Exception:
-                is_saved = False
+            is_liked = self.db.scalars(select(1).where(Like.post_id == post.id, Like.user_id == viewer_id)).first() is not None
+            is_saved = self.db.scalars(select(1).where(Save.post_id == post.id, Save.user_id == viewer_id)).first() is not None
 
-        outfit_rows = db.execute('''
-            SELECT poi.item_id, poi.category, k.foto_url as image_url
-            FROM post_outfit_items poi
-            LEFT JOIN kiyafetler k ON CAST(poi.item_id AS INTEGER) = k.id
-            WHERE poi.post_id = ?
-        ''', (row['post_id'],)).fetchall()
-        outfit_items = [
-            OutfitItemResponse(item_id=oi['item_id'], category=oi['category'], image_url=oi['image_url'])
-            for oi in outfit_rows
-        ]
+        outfit_items = []
+        if post.outfit_id:
+            outfit = self.db.scalars(select(Outfit).where(Outfit.id == post.outfit_id)).first()
+            if outfit:
+                for oi in outfit.items:
+                    # In a real app, you might want to fetch WardrobeItem image
+                    wi = self.db.scalars(select(WardrobeItem).where(WardrobeItem.id == oi.item_id)).first()
+                    img_url = wi.storage_path if wi else None
+                    cat = wi.subcategory.name if wi and wi.subcategory else "diğer"
+                    outfit_items.append(OutfitItemResponse(item_id=str(oi.item_id), category=cat, image_url=img_url))
 
-        row_dict = dict(row)
+        # We assume active_title is handled via bio or a new column, using None for now as it's optional
         return PostResponse(
-            post_id=row_dict['post_id'],
-            user_id=row_dict['user_id'],
-            username=row_dict['username'],
-            display_name=row_dict['display_name'],
-            avatar_url=row_dict['avatar_url'],
-            active_title=row_dict.get('active_title'),
-            image_url=row_dict['image_url'],
-            caption=row_dict['caption'],
-            visibility=row_dict['visibility'],
-            ai_training_consent=bool(row_dict['ai_training_consent']),
-            likes_count=row_dict['likes_count'],
-            comments_count=row_dict.get('comments_count', 0),
+            post_id=str(post.id),
+            user_id=str(profile.id),
+            username=profile.username or "",
+            display_name=profile.display_name or "",
+            avatar_url=profile.avatar_url,
+            active_title=None,
+            image_url=post.image_url,
+            caption=post.content or "",
+            visibility=post.visibility,
+            ai_training_consent=post.ai_training_consent,
+            likes_count=post.likes_count,
+            comments_count=len(post.comments), # In production, use count query if big
             is_liked=is_liked,
             is_saved=is_saved,
             outfit_items=outfit_items,
-            created_at=row_dict['created_at'],
+            created_at=post.created_at.isoformat() if post.created_at else "",
         )
 
-    @staticmethod
-    def get_user_posts(db: sqlite3.Connection, user_id: str, viewer_id: str = None):
-        _ensure_active_title_column(db)
-        base_select = (
-            'SELECT p.*, u.username, u.display_name, u.avatar_url, u.active_title '
-            'FROM posts p JOIN users u ON p.user_id = u.user_id'
-        )
-        if viewer_id and viewer_id == user_id:
-            rows = db.execute(
-                f"{base_select} WHERE p.user_id = ? ORDER BY p.created_at DESC",
-                (user_id,)
-            ).fetchall()
-        elif viewer_id:
-            rows = db.execute(
-                f"{base_select} WHERE p.user_id = ? AND (p.visibility = 'public' OR "
-                f"(p.visibility = 'followers' AND EXISTS ("
-                f"SELECT 1 FROM follows WHERE follower_id = ? AND following_id = p.user_id"
-                f"))) ORDER BY p.created_at DESC",
-                (user_id, viewer_id)
-            ).fetchall()
-        else:
-            rows = db.execute(
-                f"{base_select} WHERE p.user_id = ? AND p.visibility = 'public' ORDER BY p.created_at DESC",
-                (user_id,)
-            ).fetchall()
+    def get_user_posts(self, user_id: str, viewer_id: str | None = None) -> list[PostResponse]:
+        query = select(Post, Profile).join(Profile, Post.user_id == Profile.id).where(Post.user_id == user_id)
+        
+        if viewer_id and viewer_id != user_id:
+            # Check follows
+            is_following = self.db.scalars(
+                select(1).where(Follow.follower_id == viewer_id, Follow.following_id == user_id)
+            ).first() is not None
+            
+            if is_following:
+                query = query.where(Post.visibility.in_(['public', 'followers']))
+            else:
+                query = query.where(Post.visibility == 'public')
+        elif not viewer_id:
+            query = query.where(Post.visibility == 'public')
 
-        return [PostRepository._build_post_response(db, row, viewer_id) for row in rows]
+        query = query.order_by(Post.created_at.desc())
+        results = self.db.execute(query).all()
+        
+        return [self._build_post_response(post, profile, viewer_id) for post, profile in results]
 
-    @staticmethod
-    def get_feed(db: sqlite3.Connection, user_id: str, limit: int = 20):
-        _ensure_active_title_column(db)
-        rows = db.execute(
-            "SELECT p.*, u.username, u.display_name, u.avatar_url, u.active_title "
-            "FROM posts p JOIN users u ON p.user_id = u.user_id "
-            "WHERE (p.user_id = ? OR p.visibility = 'public' OR "
-            "(p.visibility = 'followers' AND EXISTS ("
-            "SELECT 1 FROM follows WHERE follower_id = ? AND following_id = p.user_id"
-            "))) ORDER BY p.created_at DESC LIMIT ?",
-            (user_id, user_id, limit)
-        ).fetchall()
-        return [PostRepository._build_post_response(db, row, user_id) for row in rows]
+    def get_feed(self, user_id: str, limit: int = 20) -> list[PostResponse]:
+        # public posts + followers posts + own posts
+        
+        # Subquery for following
+        following_subquery = select(Follow.following_id).where(Follow.follower_id == user_id)
+        
+        query = select(Post, Profile).join(Profile, Post.user_id == Profile.id).where(
+            or_(
+                Post.user_id == user_id,
+                Post.visibility == 'public',
+                and_(Post.visibility == 'followers', Post.user_id.in_(following_subquery))
+            )
+        ).order_by(Post.created_at.desc()).limit(limit)
+        
+        return [self._build_post_response(post, profile, user_id) for post, profile in results]
+
+    def get_post_by_id(self, post_id: str) -> Post | None:
+        return self.db.scalars(select(Post).where(Post.id == post_id)).first()
+
+    def delete_post(self, post_id: str, user_id: str) -> MessageResponse:
+        post = self.db.scalars(select(Post).where(Post.id == post_id)).first()
+        if not post:
+            raise HTTPException(status_code=404, detail="Gönderi bulunamadı")
+        if str(post.user_id) != user_id:
+            raise HTTPException(status_code=403, detail="Bu gönderiyi silme yetkiniz yok")
+
+        # Outfit silinmeli mi? CASCADE ondelete varsa OutfitItem'lar uçar
+        # Fakat biz Post'u siliyoruz, eğer Outfit de Post'a aitse silebiliriz, ancak relationship tanımlamadık.
+        if post.outfit_id:
+            outfit = self.db.scalars(select(Outfit).where(Outfit.id == post.outfit_id)).first()
+            if outfit:
+                self.db.delete(outfit)
+
+        self.db.delete(post)
+        self.db.commit()
+        return MessageResponse(success=True, message="Gönderi silindi")
+
+    def update_post(self, post_id: str, user_id: str, caption: str | None) -> MessageResponse:
+        post = self.db.scalars(select(Post).where(Post.id == post_id)).first()
+        if not post:
+            raise HTTPException(status_code=404, detail="Gönderi bulunamadı")
+        if str(post.user_id) != user_id:
+            raise HTTPException(status_code=403, detail="Bu gönderiyi düzenleme yetkiniz yok")
+
+        if caption is not None:
+            post.content = caption
+            self.db.commit()
+            
+        return MessageResponse(success=True, message="Gönderi güncellendi")
+
+    def get_saved_posts(self, user_id: str) -> list[PostResponse]:
+        query = select(Post, Profile).join(Profile, Post.user_id == Profile.id).join(Save, Post.id == Save.post_id).where(Save.user_id == user_id).order_by(Save.created_at.desc())
+        results = self.db.execute(query).all()
+        return [self._build_post_response(post, profile, user_id) for post, profile in results]
+
+    def save_post(self, post_id: str, user_id: str) -> MessageResponse:
+        existing_save = self.db.scalars(select(Save).where(Save.post_id == post_id, Save.user_id == user_id)).first()
+        if not existing_save:
+            new_save = Save(post_id=post_id, user_id=user_id)
+            self.db.add(new_save)
+            self.db.commit()
+        return MessageResponse(success=True, message="Kaydedildi")
+
+    def unsave_post(self, post_id: str, user_id: str) -> MessageResponse:
+        save = self.db.scalars(select(Save).where(Save.post_id == post_id, Save.user_id == user_id)).first()
+        if save:
+            self.db.delete(save)
+            self.db.commit()
+        return MessageResponse(success=True, message="Kayıtlardan kaldırıldı")

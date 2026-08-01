@@ -5,16 +5,36 @@ from __future__ import annotations
 
 from contextlib import asynccontextmanager
 from pathlib import Path
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
-from app.core.config import settings
-from app.core.database import init_db
-from app.api.routers import posts, feed, follows, users, auth, wardrobe, search, notifications, analytics
-from app.api.routers import likes 
-from app.services.ollama_caption_service import router as captions_router, OLLAMA_BASE_URL, OLLAMA_VISION_MODEL, OLLAMA_TEXT_MODEL
+from app.api.routers import (
+    analytics,
+    auth,
+    feed,
+    follows,
+    likes,
+    notifications,
+    posts,
+    search,
+    users,
+    wardrobe,
+)
+from app.models.base import Base, engine
+from app.models.outfit import *
+
+# Import all models to ensure they are registered before create_all
+from app.models.social import *
+from app.models.wardrobe import *
 from app.services.fashion_classifier import load_model_on_startup
+from app.services.ollama_caption_service import (
+    OLLAMA_BASE_URL,
+    OLLAMA_TEXT_MODEL,
+    OLLAMA_VISION_MODEL,
+)
+from app.services.ollama_caption_service import router as captions_router
 
 STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
 STATIC_DIR.mkdir(exist_ok=True)
@@ -27,6 +47,7 @@ async def _warmup_ollama_models():
     keep_alive=10m ile model 10 dakika bellekte kalır — sonraki istekler hızlı olur.
     """
     import asyncio
+
     import httpx
 
     await asyncio.sleep(4)  # Backend tamamen başlayana kadar bekle
@@ -68,7 +89,7 @@ async def _warmup_ollama_models():
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Uygulama başlatılırken veritabanını oluşturur, FashionSigLIP ve LLaVA modellerini ön-ısıtır."""
-    init_db()
+    pass  # Base.metadata.create_all(bind=engine)
     import asyncio
     loop = asyncio.get_event_loop()
     # FashionSigLIP — Kıyafet sınıflandırma modelini bellekte hazırla
@@ -100,8 +121,8 @@ app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 # Router'ları dahil et
 app.include_router(auth.router,      prefix="/auth",     tags=["Auth"])
 app.include_router(posts.router,     prefix="/posts",    tags=["Posts"])
-app.include_router(likes.router,  tags=["Likes"])  
-app.include_router(feed.router, tags=["Feed"])
+app.include_router(likes.router,     prefix="/likes",    tags=["Likes"])
+app.include_router(feed.router, prefix="/feed", tags=["Feed"])
 app.include_router(follows.router, tags=["Follows"])
 app.include_router(users.router,     prefix="/users",    tags=["Users"])
 app.include_router(search.router,    prefix="/search",      tags=["Search"])

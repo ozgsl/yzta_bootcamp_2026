@@ -54,6 +54,7 @@ class _EditItemScreenState extends ConsumerState<EditItemScreen> {
     'Sneaker',
     'Çanta',
     'Aksesuar',
+    'Eşarp',
     'Diğer',
   ];
 

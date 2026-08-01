@@ -17,12 +17,12 @@ from __future__ import annotations
 import base64
 import os
 import uuid
-import httpx
 from pathlib import Path
-from fastapi import APIRouter, HTTPException, UploadFile, File
-from typing import Optional
 
+import httpx
+from fastapi import APIRouter, File, HTTPException, UploadFile
 from pydantic import BaseModel
+
 from app.domain.schemas import CaptionRequest, MessageResponse
 from app.services.fashion_classifier import classifier as fashion_classifier
 
@@ -48,7 +48,7 @@ SERVER_PORT = os.getenv("SERVER_PORT", "8000")
 # Yardımcı: Görseli base64'e çevir
 # ─────────────────────────────────────────────────────────
 
-def _image_to_base64(image_url: Optional[str]) -> Optional[str]:
+def _image_to_base64(image_url: str | None) -> str | None:
     """
     Görsel URL'sini alır:
     - Yerel static/uploads/ dosyasıysa diskten okur
@@ -82,11 +82,11 @@ def _image_to_base64(image_url: Optional[str]) -> Optional[str]:
 # ─────────────────────────────────────────────────────────
 
 def _caption_with_llava(
-    image_b64: Optional[str],
+    image_b64: str | None,
     outfit_desc: str,
     style_hint: str = "",
-    fashion_analysis: Optional[dict] = None,
-) -> Optional[str]:
+    fashion_analysis: dict | None = None,
+) -> str | None:
     """
     Ollama llava modeli ile görsel analizi yapar.
     FashionSigLIP analiz sonuçları varsa prompt'a eklenir — çok daha isabetli caption üretilir.
@@ -224,7 +224,7 @@ def _detect_outfit_items_with_llava(image_b64: str) -> list:
 def _generate_outfit_story_with_ollama(
     detected_items: list,
     style_hint: str = "",
-    fashion_analysis: Optional[dict] = None,
+    fashion_analysis: dict | None = None,
 ) -> str:
     """
     Tespit edilen kıyafet listesini alır ve kombini açıklayan Türkçe metin üretir.
@@ -294,7 +294,7 @@ def _generate_outfit_story_with_ollama(
 def _caption_text_only(
     outfit_desc: str,
     style_hint: str = "",
-    fashion_analysis: Optional[dict] = None,
+    fashion_analysis: dict | None = None,
 ) -> str:
     """llama3.2 ile metin (+ isteğe bağlı FashionSigLIP analizi) bilgisine göre caption üretir."""
     prompt = (
@@ -337,7 +337,7 @@ class CaptionRequestExtended(CaptionRequest):
     CaptionRequest'i genişletir: FashionSigLIP analiz sonuçlarını kabul eder.
     /captions/upload'dan dönen ai_analysis dict'ini buraya iletebilirsiniz.
     """
-    ai_analysis: Optional[dict] = None   # FashionSigLIP sonucu (opsiyonel)
+    ai_analysis: dict | None = None   # FashionSigLIP sonucu (opsiyonel)
 
 
 @router.post("/suggest", response_model=MessageResponse)
@@ -362,7 +362,7 @@ async def suggest_caption(req: CaptionRequestExtended):
     image_url  = req.image_url
 
     # --- FashionSigLIP analizi ---
-    fashion_analysis: Optional[dict] = req.ai_analysis  # Client'tan gelebilir
+    fashion_analysis: dict | None = req.ai_analysis  # Client'tan gelebilir
     if not fashion_analysis and image_url and fashion_classifier.is_ready:
         try:
             image_b64_for_fashion = _image_to_base64(image_url)
@@ -373,7 +373,7 @@ async def suggest_caption(req: CaptionRequestExtended):
         except Exception as e:
             print(f"[FashionSigLIP] Suggest analysis error: {e}")
 
-    caption: Optional[str] = None
+    caption: str | None = None
 
     # 1. Görsel varsa llava ile analiz et (FashionSigLIP verisi prompt'a eklenir)
     if image_url:
@@ -386,7 +386,7 @@ async def suggest_caption(req: CaptionRequestExtended):
 
     # 3. Statik fallback
     if not caption:
-        caption = f"✨ Harika bir kombin! 🔥 #moda #style #ootd #fashion"
+        caption = "✨ Harika bir kombin! 🔥 #moda #style #ootd #fashion"
 
     return MessageResponse(
         success=True,
@@ -407,10 +407,10 @@ async def suggest_caption(req: CaptionRequestExtended):
 # ─────────────────────────────────────────────────────────────────────────────
 
 class OutfitStoryRequest(BaseModel):
-    image_url: Optional[str] = None
-    image_b64: Optional[str] = None
+    image_url: str | None = None
+    image_b64: str | None = None
     style_hint: str = ""
-    ai_analysis: Optional[dict] = None  # FashionSigLIP sonucu (opsiyonel)
+    ai_analysis: dict | None = None  # FashionSigLIP sonucu (opsiyonel)
 
 
 @router.post("/outfit-story")
@@ -513,7 +513,7 @@ async def upload_image(file: UploadFile = File(...)):
     url = f"http://{SERVER_HOST}:{SERVER_PORT}/static/uploads/{filename}"
 
     # FashionSigLIP ile otomatik analiz
-    ai_analysis: Optional[dict] = None
+    ai_analysis: dict | None = None
     if fashion_classifier.is_ready:
         try:
             result = fashion_classifier.classify_image(image_path=dest)
@@ -536,8 +536,8 @@ async def upload_image(file: UploadFile = File(...)):
 # ENDPOINT: POST /captions/analyze-item
 # -----------------------------------------------------------------------------
 class AnalyzeItemRequest(BaseModel):
-    image_url: Optional[str] = None
-    image_b64: Optional[str] = None
+    image_url: str | None = None
+    image_b64: str | None = None
 
 @router.post("/analyze-item")
 async def analyze_item(req: AnalyzeItemRequest):
@@ -592,7 +592,7 @@ async def analyze_item(req: AnalyzeItemRequest):
     except Exception as e:
         return {
             "success": False,
-            "message": f"LLaVa analizi başarısız: {str(e)}",
+            "message": f"LLaVa analizi başarısız: {e!s}",
             "data": { "tur": "", "renk": "", "kumas": "", "stil": "" }
         }
 

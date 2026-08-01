@@ -10,17 +10,18 @@ Primary functions:
 """
 
 from __future__ import annotations
+
 import json
 import os
 import re
+
 import httpx
-from typing import List, Dict
 
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "llama3.2")
 
 
-def _ollama_chat(messages: List[Dict], temperature: float = 0.7) -> str:
+def _ollama_chat(messages: list[dict], temperature: float = 0.7) -> str:
     """Calls Ollama /api/chat endpoint and returns string response."""
     payload = {
         "model": OLLAMA_MODEL,
@@ -77,7 +78,7 @@ ALWAYS output response in the following JSON format:
 }"""
 
 
-def get_chat_response(history: List[Dict], new_message: str) -> dict:
+def get_chat_response(history: list[dict], new_message: str) -> dict:
     """
     history: [{"rol": "user"/"assistant", "mesaj": "..."}]
     new_message: User's new chat message
@@ -127,7 +128,7 @@ Rules:
 """
 
 
-def generate_outfit_recommendation(context: dict, clean_clothes: List[Dict]) -> dict:
+def generate_outfit_recommendation(context: dict, clean_clothes: list[dict]) -> dict:
     """
     context: {"etkinlik": "...", "hava_durumu": "...", "stil_tercihi": "..."}
     clean_clothes: List of clean clothes dicts
@@ -160,9 +161,38 @@ def generate_outfit_recommendation(context: dict, clean_clothes: List[Dict]) -> 
     event = context.get("etkinlik", "günlük kullanım")
     weather = context.get("hava_durumu", "normal hava")
 
+    # Kıyafet listesini AI için zengin formatta hazırla (foto_url dahil)
+    clothes_summary = []
+    for c in clean_clothes:
+        entry = (
+            f"ID:{c['id']} | Tür:{c.get('tur','?')} | Renk:{c.get('renk','?')} "
+            f"| Stil:{c.get('stil_etiketi','?')} | Mevsim:{c.get('mevsim','?')}"
+        )
+        if c.get("marka"):
+            entry += f" | Marka:{c['marka']}"
+        if c.get("beden"):
+            entry += f" | Beden:{c['beden']}"
+        if c.get("foto_url"):
+            entry += f" | Foto:{c['foto_url']}"
+        clothes_summary.append(entry)
+
+    clothes_text = "\n".join(clothes_summary)
+
     prompt_messages = [
         {"role": "system", "content": RECOMMENDER_SYSTEM_PROMPT},
-        {"role": "user", "content": f"Context: {json.dumps(context, ensure_ascii=False)}\nClothes: {json.dumps(clean_clothes, ensure_ascii=False)}"},
+        {
+            "role": "user",
+            "content": (
+                f"Etkinlik: {context.get('etkinlik', '?')}\n"
+                f"Hava durumu: {context.get('hava_durumu', '?')}\n"
+                f"Stil tercihi: {context.get('stil_tercihi', 'belirtilmedi')}\n\n"
+                f"Kullanıcının temiz kıyafetleri (her satır bir parça):\n{clothes_text}\n\n"
+                "Yukarıdaki kıyafetlerden 2-4 tanesini seçerek kombin öner. "
+                "Renk uyumu, mevsim ve etkinliğe uygunluğa dikkat et. "
+                "Yanıtı SADECE JSON olarak ver:\n"
+                "{\"secilen_kiyafet_idleri\": [id1, id2, ...], \"aciklama\": \"...\"}"
+            ),
+        },
     ]
 
     raw = _ollama_chat(prompt_messages, temperature=0.3)

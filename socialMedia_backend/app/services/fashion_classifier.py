@@ -13,11 +13,10 @@ NOT: FashionSigLIP İngilizce metin ile eğitilmiş bir modeldir.
 """
 from __future__ import annotations
 
-import io
 import base64
+import io
 import logging
 from pathlib import Path
-from typing import Optional
 
 logger = logging.getLogger(__name__)
 
@@ -131,10 +130,10 @@ class FashionClassifier:
     Uygulama başlatıldığında load() çağrılır, model bellekte tutulur.
     """
 
-    _instance: Optional["FashionClassifier"] = None
+    _instance: FashionClassifier | None = None
     _initialized: bool = False
 
-    def __new__(cls) -> "FashionClassifier":
+    def __new__(cls) -> FashionClassifier:
         if cls._instance is None:
             cls._instance = super().__new__(cls)
         return cls._instance
@@ -145,7 +144,7 @@ class FashionClassifier:
         self.model = None
         self.processor = None
         self.tokenizer = None
-        self._load_error: Optional[str] = None
+        self._load_error: str | None = None
         self._initialized = True
 
     # -----------------------------------------------------------------------
@@ -190,9 +189,9 @@ class FashionClassifier:
 
     def _load_pil_image(
         self,
-        image_path: Optional[Path] = None,
-        image_b64: Optional[str] = None,
-        image_bytes: Optional[bytes] = None,
+        image_path: Path | None = None,
+        image_b64: str | None = None,
+        image_bytes: bytes | None = None,
     ):
         """PIL.Image döner. Kaynak: dosya yolu, base64 veya ham bytes."""
         from PIL import Image  # type: ignore
@@ -239,9 +238,9 @@ class FashionClassifier:
 
     def classify_image(
         self,
-        image_path: Optional[Path] = None,
-        image_b64: Optional[str] = None,
-        image_bytes: Optional[bytes] = None,
+        image_path: Path | None = None,
+        image_b64: str | None = None,
+        image_bytes: bytes | None = None,
     ) -> dict:
         """
         Kıyafet görselini analiz eder.

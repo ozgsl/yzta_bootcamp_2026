@@ -108,6 +108,7 @@ class FollowRequest(BaseModel):
 class LikeRequest(BaseModel):
     """Beğeni isteği."""
     user_id: str
+    post_id: str
 
 
 class SaveRequest(BaseModel):
@@ -118,7 +119,9 @@ class SaveRequest(BaseModel):
 class CommentRequest(BaseModel):
     """Yorum yapma isteği."""
     user_id: str
+    post_id: str
     content: str
+    parent_id: str | None = None
 
 
 class CaptionRequest(BaseModel):
@@ -252,3 +255,64 @@ class PasswordResetWithTokenRequest(BaseModel):
     email: str
     new_password: str
     confirm_password: str
+
+class FollowRequest(BaseModel):
+    follower_id: str
+    following_id: str
+
+class FollowersCountResponse(BaseModel):
+    followers_count: int
+    following_count: int
+
+class LikeRequest(BaseModel):
+    user_id: str
+    post_id: str
+
+class SaveRequest(BaseModel):
+    user_id: str
+
+class AnalyzeClothRequest(BaseModel):
+    gorsel_url: str
+
+class ClothAddRequest(BaseModel):
+    user_id: str
+    image_url: str
+    category_id: str
+    color_id: str
+    style_id: str | None = None
+    brand: str | None = None
+    material: str | None = None
+    season: str | None = None
+    size: str | None = None
+    weather_condition: str | None = None
+    temperature: int | None = None
+    metadata_json: dict | None = None
+
+class ClothUpdateRequest(BaseModel):
+    user_id: str
+    category_id: str | None = None
+    color_id: str | None = None
+    style_id: str | None = None
+    brand: str | None = None
+    material: str | None = None
+    season: str | None = None
+    size: str | None = None
+    weather_condition: str | None = None
+    temperature: int | None = None
+
+class OutfitRecommendRequest(BaseModel):
+    user_id: str
+    style_id: str | None = None
+    weather_condition: str | None = None
+
+class LaundryStatusRequest(BaseModel):
+    user_id: str
+    is_in_laundry: bool
+
+class FavoriteStatusRequest(BaseModel):
+    user_id: str
+    is_favorite: bool
+
+class ChatRequest(BaseModel):
+    user_id: str
+    message: str

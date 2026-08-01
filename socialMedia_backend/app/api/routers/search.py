@@ -1,64 +1,34 @@
-import sqlite3
 from fastapi import APIRouter, Depends, HTTPException, Query
-from typing import List, Optional
+from sqlalchemy.orm import Session
 
-from app.core.database import get_db
-from app.domain.schemas import UserResponse
+from app.models.base import get_db
+from app.services.search_service import SearchService
 
 router = APIRouter()
 
-@router.get("", response_model=List[UserResponse])
+def get_search_service(db: Session = Depends(get_db)) -> SearchService:
+    return SearchService(db)
+
+@router.get("/users")
 def search_users(
-    query: str = Query(..., min_length=1, description="Arama sorgusu (kullanıcı adı veya isim)"),
-    viewer_id: Optional[str] = Query(None, description="Aramayı yapan kullanıcı ID"),
-    db: sqlite3.Connection = Depends(get_db)
+    q: str = Query(..., min_length=1),
+    viewer_id: str = None,
+    service: SearchService = Depends(get_search_service)
 ):
-    """
-    Kullanıcı arama uç noktası.
-    Hem 'username' hem de 'display_name' alanlarında 'LIKE' sorgusu yapar.
-    """
-    search_term = f"%{query}%"
-    
     try:
-        rows = db.execute(
-            """
-            SELECT user_id, email, username, display_name, avatar_url, bio,
-                   followers_count, following_count, created_at, profile_visibility
-            FROM users
-            WHERE username LIKE ? OR display_name LIKE ?
-            LIMIT 50
-            """,
-            (search_term, search_term)
-        ).fetchall()
-        
-        results = []
-        for row in rows:
-            user_id = row["user_id"]
-            
-            is_following = False
-            if viewer_id and viewer_id != user_id:
-                follow_check = db.execute(
-                    "SELECT 1 FROM follows WHERE follower_id = ? AND following_id = ?",
-                    (viewer_id, user_id)
-                ).fetchone()
-                is_following = follow_check is not None
-                
-            results.append(
-                UserResponse(
-                    user_id=user_id,
-                    email=row["email"],
-                    username=row["username"],
-                    display_name=row["display_name"],
-                    avatar_url=row["avatar_url"],
-                    bio=row["bio"],
-                    followers_count=row["followers_count"],
-                    following_count=row["following_count"],
-                    created_at=row["created_at"],
-                    is_following=is_following,
-                    profile_visibility=row["profile_visibility"],
-                )
-            )
-            
-        return results
+        users = service.search_users(query=q, viewer_id=viewer_id, limit=20)
+        return {
+            "query": q,
+            "results": [
+                {
+                    "id": str(user.id),
+                    "username": user.username,
+                    "display_name": user.display_name,
+                    "avatar_url": user.avatar_url,
+                    "profile_visibility": user.profile_visibility,
+                    "followers_count": user.followers_count
+                } for user in users
+            ]
+        }
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Arama işlemi sırasında hata oluştu: {e}")
+        raise HTTPException(status_code=500, detail=str(e))

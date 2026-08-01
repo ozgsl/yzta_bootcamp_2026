@@ -1,45 +1,60 @@
 from __future__ import annotations
-from typing import Optional, Union
-import sqlite3
+
 from fastapi import HTTPException
+from sqlalchemy import select, update
+from sqlalchemy.orm import Session
+
 from app.domain.schemas import UserResponse
+from app.models.social import Profile
+
 
 class UserRepository:
-    def __init__(self, db: sqlite3.Connection):
+    def __init__(self, db: Session):
         self.db = db
 
-    def get_user_profile(self, user_id: str) -> UserResponse:
-        user = self.db.execute(
-            """
-            SELECT user_id, email, username, display_name, avatar_url, bio,
-                   followers_count, following_count, created_at, profile_visibility,
-                   height, weight, chest, waist, hips, location, timezone
-            FROM users WHERE user_id = ?
-            """,
-            (user_id,)
-        ).fetchone()
+    def get_user_by_id(self, user_id: str) -> Profile | None:
+        return self.db.scalars(select(Profile).where(Profile.id == user_id)).first()
 
-        if not user:
+    def get_user_profile(self, user_id: str) -> UserResponse:
+        profile = self.db.scalars(select(Profile).where(Profile.id == user_id)).first()
+
+        if not profile:
             raise HTTPException(status_code=404, detail="Kullanıcı bulunamadı.")
         
-        return UserResponse(**dict(user))
+        return UserResponse(
+            user_id=str(profile.id),
+            email="", # Usually handled by Supabase Auth
+            username=profile.username or "",
+            display_name=profile.display_name or "",
+            avatar_url=profile.avatar_url,
+            bio=profile.bio,
+            followers_count=profile.followers_count,
+            following_count=profile.following_count,
+            created_at=profile.created_at.isoformat() if profile.created_at else "",
+            profile_visibility=profile.profile_visibility,
+            height=profile.height,
+            weight=profile.weight,
+            chest=profile.chest,
+            waist=profile.waist,
+            hips=profile.hips,
+            location=profile.location,
+            timezone=profile.timezone
+        )
 
     def update_user_profile(
         self, user_id: str, 
-        display_name: Optional[str] = None, 
-        bio: Optional[str] = None, 
-        avatar_url: Optional[str] = None,
-        height: Optional[str] = None,
-        weight: Optional[str] = None,
-        chest: Optional[str] = None,
-        waist: Optional[str] = None,
-        hips: Optional[str] = None,
-        location: Optional[str] = None,
-        timezone: Optional[str] = None
+        display_name: str | None = None, 
+        bio: str | None = None, 
+        avatar_url: str | None = None,
+        height: str | None = None,
+        weight: str | None = None,
+        chest: str | None = None,
+        waist: str | None = None,
+        hips: str | None = None,
+        location: str | None = None,
+        timezone: str | None = None
     ) -> None:
-        updates = []
-        params = []
-        
+        updates = {}
         fields = {
             "display_name": display_name,
             "bio": bio,
@@ -55,21 +70,24 @@ class UserRepository:
         
         for k, v in fields.items():
             if v is not None:
-                updates.append(f"{k} = ?")
-                params.append(v)
+                updates[k] = v
             
         if not updates:
             return
             
-        params.append(user_id)
-        query = f"UPDATE users SET {', '.join(updates)} WHERE user_id = ?"
-        self.db.execute(query, params)
+        self.db.execute(
+            update(Profile).where(Profile.id == user_id).values(**updates)
+        )
         self.db.commit()
 
     def update_privacy_settings(self, user_id: str, profile_visibility: str) -> None:
-        self.db.execute("UPDATE users SET profile_visibility = ? WHERE user_id = ?", (profile_visibility, user_id))
+        self.db.execute(
+            update(Profile).where(Profile.id == user_id).values(profile_visibility=profile_visibility)
+        )
         self.db.commit()
 
     def delete_account(self, user_id: str) -> None:
-        self.db.execute("DELETE FROM users WHERE user_id = ?", (user_id,))
-        self.db.commit()
+        profile = self.db.scalars(select(Profile).where(Profile.id == user_id)).first()
+        if profile:
+            self.db.delete(profile)
+            self.db.commit()

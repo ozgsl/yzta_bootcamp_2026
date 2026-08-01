@@ -20,7 +20,9 @@ class _WardrobeScreenState extends ConsumerState<WardrobeScreen> {
   final ApiService _apiService = ApiService();
   late Future<List<dynamic>> _clothesFuture;
   String? _selectedCategory;
+  bool _isLaundryMode = false;
   String _searchQuery = '';
+  int _refreshKey = 0; // Bu değer değişince FutureBuilder zorunlu yenilenir
 
   @override
   void initState() {
@@ -29,13 +31,14 @@ class _WardrobeScreenState extends ConsumerState<WardrobeScreen> {
   }
 
   void _loadClothes() {
+    if (!mounted) return; // Widget ağacından kaldırıldıysa çık
     final userId = ref.read(authProvider).currentUserId ?? '';
     setState(() {
+      _refreshKey++; // Her çağrıda key artar — FutureBuilder kesinlikle yenilenir
       if (userId.isEmpty) {
         _clothesFuture = Future.value([]);
       } else {
         _clothesFuture = _apiService.getClothes(userId).then((clothes) {
-          // Temiz kıyafet sayısını kontrol et, az kalırsa bildirim gönder
           NotificationService().checkLowClothesCount(clothes);
           return clothes;
         });
@@ -60,7 +63,9 @@ class _WardrobeScreenState extends ConsumerState<WardrobeScreen> {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text(
-                    s.isTr ? 'Gardırobum' : 'My Wardrobe',
+                    _isLaundryMode 
+                        ? (s.isTr ? 'Kirli Sepeti' : 'Laundry Basket') 
+                        : (s.isTr ? 'Gardırobum' : 'My Wardrobe'),
                     style: TextStyle(
                       color: Theme.of(context).textTheme.bodyLarge?.color ?? Colors.white,
                       fontSize: 24,
@@ -70,6 +75,20 @@ class _WardrobeScreenState extends ConsumerState<WardrobeScreen> {
                   ),
                   Row(
                     children: [
+                      IconButton(
+                        icon: Icon(
+                          _isLaundryMode ? Icons.local_laundry_service : Icons.local_laundry_service_outlined,
+                          color: _isLaundryMode ? Theme.of(context).colorScheme.primary : (Theme.of(context).iconTheme.color ?? Colors.white),
+                          size: 28,
+                        ),
+                        tooltip: s.isTr ? 'Kirli Sepeti' : 'Laundry Basket',
+                        onPressed: () {
+                          setState(() {
+                            _isLaundryMode = !_isLaundryMode;
+                            _selectedCategory = null; // Clear standard filters when toggling mode
+                          });
+                        },
+                      ),
                       IconButton(
                         icon: Icon(Icons.style_rounded, color: Theme.of(context).iconTheme.color ?? Colors.white, size: 28),
                         tooltip: s.isTr ? 'Kombinlerim' : 'My Outfits',
@@ -83,14 +102,16 @@ class _WardrobeScreenState extends ConsumerState<WardrobeScreen> {
                       IconButton(
                         icon: Icon(Icons.add_circle_outline_rounded,
                             color: Theme.of(context).iconTheme.color ?? Colors.white, size: 28),
-                        onPressed: () {
-                          Navigator.push(
+                        onPressed: () async {
+                          final refreshed = await Navigator.push<bool>(
                             context,
                             MaterialPageRoute(
                                 builder: (_) => const AddItemScreen()),
-                          ).then((refreshed) {
-                            if (refreshed == true) _loadClothes();
-                          });
+                          );
+                          // true dönürse (başarılı ekleme) gardrıobu yenile
+                          if (refreshed == true && mounted) {
+                            _loadClothes();
+                          }
                         },
                       ),
                     ],
@@ -158,12 +179,7 @@ class _WardrobeScreenState extends ConsumerState<WardrobeScreen> {
                     onTap: () => setState(() => _selectedCategory =
                         _selectedCategory == 'Favorites' ? null : 'Favorites'),
                   ),
-                  _FilterChip(
-                    label: s.isTr ? 'Kirli Sepeti' : 'Laundry Basket',
-                    isSelected: _selectedCategory == 'Laundry Basket' || _selectedCategory == 'Kirli Sepeti',
-                    onTap: () => setState(() => _selectedCategory =
-                        (_selectedCategory == 'Laundry Basket' || _selectedCategory == 'Kirli Sepeti') ? null : 'Laundry Basket'),
-                  ),
+
                   _FilterChip(
                     label: 'Shirt',
                     isSelected: _selectedCategory == 'Shirt',
@@ -202,6 +218,12 @@ class _WardrobeScreenState extends ConsumerState<WardrobeScreen> {
                             ? null
                             : 'Accessories'),
                   ),
+                  _FilterChip(
+                    label: s.isTr ? 'Eşarp' : 'Hijab',
+                    isSelected: _selectedCategory == 'Hijab',
+                    onTap: () => setState(() => _selectedCategory =
+                        _selectedCategory == 'Hijab' ? null : 'Hijab'),
+                  ),
                 ],
               ),
             ),
@@ -209,6 +231,7 @@ class _WardrobeScreenState extends ConsumerState<WardrobeScreen> {
 
             Expanded(
               child: FutureBuilder<List<dynamic>>(
+                key: ValueKey(_refreshKey), // key değişince Flutter tamamen yeniden build eder
                 future: _clothesFuture,
                 builder: (context, snapshot) {
                   if (snapshot.connectionState == ConnectionState.waiting) {
@@ -228,12 +251,17 @@ class _WardrobeScreenState extends ConsumerState<WardrobeScreen> {
 
                   var clothes = snapshot.data ?? [];
                   
-                  // Apply Category Filter
+                  // 1. Base Filter (Laundry Mode)
+                  if (_isLaundryMode) {
+                    clothes = clothes.where((c) => c['temiz'] == 0 || c['temiz'] == false || c['is_dirty'] == 1 || c['is_dirty'] == true).toList();
+                  } else {
+                    clothes = clothes.where((c) => c['temiz'] == 1 || c['temiz'] == true).toList();
+                  }
+                  
+                  // 2. Apply Category Filter
                   if (_selectedCategory != null) {
                     if (_selectedCategory == 'Favorites') {
-                      clothes = clothes.where((c) => (c['is_favorite'] == 1 || c['is_favorite'] == true) && (c['temiz'] == 1 || c['temiz'] == true)).toList();
-                    } else if (_selectedCategory == 'Laundry Basket' || _selectedCategory == 'Kirli Sepeti') {
-                      clothes = clothes.where((c) => c['temiz'] == 0 || c['temiz'] == false || c['is_dirty'] == 1 || c['is_dirty'] == true).toList();
+                      clothes = clothes.where((c) => (c['is_favorite'] == 1 || c['is_favorite'] == true)).toList();
                     } else {
                       clothes = clothes.where((c) {
                         final type = c['tur']?.toString().toLowerCase() ?? '';
@@ -248,14 +276,11 @@ class _WardrobeScreenState extends ConsumerState<WardrobeScreen> {
                         if (searchTarget == 'jeans') searchTarget = 'kot';
                         if (searchTarget == 'shoes') searchTarget = 'ayakkabı';
                         if (searchTarget == 'accessories') searchTarget = 'aksesuar';
+                        if (searchTarget == 'hijab') searchTarget = 'eşarp';
 
-                        final isClean = (c['temiz'] == 1 || c['temiz'] == true);
-                        return (type.contains(searchTarget) || tags.contains(searchTarget) || category.contains(searchTarget)) && isClean;
+                        return (type.contains(searchTarget) || tags.contains(searchTarget) || category.contains(searchTarget));
                       }).toList();
                     }
-                  } else {
-                    // Hide dirty clothes by default when no category is selected
-                    clothes = clothes.where((c) => c['temiz'] == 1 || c['temiz'] == true).toList();
                   }
 
                   // Apply Search Query Filter
@@ -340,16 +365,17 @@ class _WardrobeScreenState extends ConsumerState<WardrobeScreen> {
                               final label = parts.join(', ');
 
                               return GestureDetector(
-                                onTap: () {
-                                  Navigator.push(
+                                onTap: () async {
+                                  final refreshed = await Navigator.push<bool>(
                                     context,
                                     MaterialPageRoute(
                                       builder: (_) =>
                                           EditItemScreen(initialItem: cloth),
                                     ),
-                                  ).then((refreshed) {
-                                    if (refreshed == true) _loadClothes();
-                                  });
+                                  );
+                                  if (refreshed == true && mounted) {
+                                    _loadClothes();
+                                  }
                                 },
                                 child: Container(
                                   decoration: BoxDecoration(

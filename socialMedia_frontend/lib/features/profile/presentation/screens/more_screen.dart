@@ -177,6 +177,10 @@ class MoreScreen extends ConsumerWidget {
                 ),
                 child: Column(
                   children: [
+                    _SettingsAppearance(
+                        title: strings.theme,
+                        icon: Icons.brightness_medium_rounded),
+                    const Divider(height: 1),
                     _SettingsTile(
                         title: strings.termsOfUse,
                         icon: Icons.description_rounded,
@@ -201,16 +205,6 @@ class MoreScreen extends ConsumerWidget {
                         }),
                   ],
                 ),
-              ),
-              const SizedBox(height: 16),
-              Container(
-                decoration: BoxDecoration(
-                  color: Theme.of(context).cardColor,
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                child: _SettingsAppearance(
-                    title: strings.theme,
-                    icon: Icons.brightness_medium_rounded),
               ),
               const SizedBox(height: 100), // padding for bottom nav
             ],

@@ -30,7 +30,7 @@ class AppConfig {
     } catch (_) {}
 
     // Fiziksel cihaz / Emülatör için yerel ağ IP'si
-    return '192.168.1.109';
+    return '192.168.1.104';
   }
 
   static int get apiPort => _definedPort;

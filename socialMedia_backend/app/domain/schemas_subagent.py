@@ -1,11 +1,12 @@
 from __future__ import annotations
+
 """
 Pydantic v2 modelleri — Request & Response şemaları.
 """
 
-from pydantic import BaseModel, Field
-from typing import Literal, Optional
+from typing import Literal
 
+from pydantic import BaseModel, Field
 
 # ============================================================
 # Request Modelleri
@@ -15,7 +16,7 @@ class PostCreate(BaseModel):
     """Yeni post oluşturma isteği."""
     user_id: str
     image_url: str
-    caption: Optional[str] = None
+    caption: str | None = None
     outfit_items: list[str] = Field(default_factory=list)  # item_id listesi
     visibility: Literal["public", "followers", "private"] = "public"
     ai_training_consent: bool = False
@@ -51,8 +52,8 @@ class UserResponse(BaseModel):
     user_id: str
     username: str
     display_name: str
-    avatar_url: Optional[str] = None
-    bio: Optional[str] = None
+    avatar_url: str | None = None
+    bio: str | None = None
     followers_count: int = 0
     following_count: int = 0
     created_at: str
@@ -63,7 +64,7 @@ class OutfitItemResponse(BaseModel):
     """Post'a bağlı kombin parçası."""
     item_id: str
     category: str
-    image_url: Optional[str] = None
+    image_url: str | None = None
 
 
 class PostResponse(BaseModel):
@@ -72,9 +73,9 @@ class PostResponse(BaseModel):
     user_id: str
     username: str = ""
     display_name: str = ""
-    avatar_url: Optional[str] = None
+    avatar_url: str | None = None
     image_url: str
-    caption: Optional[str] = None
+    caption: str | None = None
     visibility: str = "public"
     ai_training_consent: bool = False
     likes_count: int = 0
@@ -86,7 +87,7 @@ class PostResponse(BaseModel):
 class FeedResponse(BaseModel):
     """Sayfalandırılmış feed yanıtı."""
     posts: list[PostResponse]
-    next_cursor: Optional[str] = None
+    next_cursor: str | None = None
 
 
 class UserStatsResponse(BaseModel):
@@ -101,4 +102,4 @@ class MessageResponse(BaseModel):
     """Genel başarı/hata mesajı."""
     success: bool
     message: str
-    data: Optional[dict] = None
+    data: dict | None = None
