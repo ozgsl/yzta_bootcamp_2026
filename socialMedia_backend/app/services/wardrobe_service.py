@@ -1,11 +1,21 @@
 import logging
+import os
 from pathlib import Path
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.models.wardrobe import Color, Style, Subcategory, WardrobeItem
-from app.services import fashion_classifier
+
+# Cloud Run ortamında PyTorch yüklemesini atla
+_fashion_classifier = None
+
+def _get_classifier():
+    global _fashion_classifier
+    if _fashion_classifier is None and "K_SERVICE" not in os.environ:
+        from app.services import fashion_classifier as _fc
+        _fashion_classifier = _fc
+    return _fashion_classifier
 
 logger = logging.getLogger(__name__)
 
@@ -15,7 +25,7 @@ class WardrobeService:
     """
     def __init__(self, db: Session):
         self.db = db
-        self.fashion_classifier = fashion_classifier
+        self.fashion_classifier = _get_classifier()
 
     def process_and_add_item(self, user_id: str, filename: str) -> WardrobeItem:
         """
