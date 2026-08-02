@@ -1,10 +1,16 @@
 import os
-
+import uuid
 from dotenv import load_dotenv
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, event
+from sqlalchemy.engine import Engine
 from sqlalchemy.orm import declarative_base, sessionmaker
 
 load_dotenv()
+
+@event.listens_for(Engine, "connect")
+def set_sqlite_functions(dbapi_connection, connection_record):
+    if hasattr(dbapi_connection, "create_function") and dbapi_connection.__class__.__module__.startswith("sqlite3"):
+        dbapi_connection.create_function("gen_random_uuid", 0, lambda: str(uuid.uuid4()))
 
 # Google Cloud Run (K_SERVICE) üzerinde çalışırken veya yerel testlerde SQLite yedeklemesi
 is_cloud_run = "K_SERVICE" in os.environ or os.getenv("USE_SQLITE") == "true"

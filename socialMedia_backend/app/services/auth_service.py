@@ -1,6 +1,7 @@
 import hashlib
 import logging
 import random
+import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
@@ -37,7 +38,6 @@ class AuthService:
     def verify_password(self, plain_password: str, hashed_password: str) -> bool:
         if not hashed_password:
             return False
-        # Fallback for old plain-text passwords during migration
         if not hashed_password.startswith("$2b$"):
             return plain_password == hashed_password
         return pwd_context.verify(plain_password, hashed_password)
@@ -61,7 +61,7 @@ class AuthService:
             raise ValueError("Bu e-posta adresi zaten kullanılıyor.")
             
         hashed_password = self.get_password_hash(password)
-        new_user = Profile(email=email, password_hash=hashed_password)
+        new_user = Profile(id=uuid.uuid4(), email=email, password_hash=hashed_password)
         self.db.add(new_user)
         self.db.commit()
         self.db.refresh(new_user)
@@ -81,6 +81,7 @@ class AuthService:
         rt_hash = self.hash_token(refresh_token_plain)
         
         rt = RefreshToken(
+            id=uuid.uuid4(),
             user_id=user.id,
             token_hash=rt_hash,
             device=device,
@@ -99,6 +100,7 @@ class AuthService:
             clean_name = (display_name or email.split('@')[0]).lower().replace(" ", "_")[:20]
             new_username = f"{clean_name}_{random.getrandbits(32):08x}"
             user = Profile(
+                id=uuid.uuid4(),
                 email=email,
                 password_hash=None,
                 username=new_username,
