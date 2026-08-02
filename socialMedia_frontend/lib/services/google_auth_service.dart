@@ -16,12 +16,17 @@ class GoogleAuthService {
   static final GoogleAuthService _instance = GoogleAuthService._internal();
   factory GoogleAuthService() => _instance;
 
-  // CLIENT_ID — GoogleService-Info.plist'ten
-  static const _clientId =
+  // CLIENT_ID (Sadece iOS için gerekir, Android google-services.json dosyasından otomatik okur)
+  static const _iosClientId =
       '777699158570-dpl8ajp9lt2qkg7p29bbldmokr3qp1l9.apps.googleusercontent.com';
 
+  // Bizim projemizin (spot-android-c805f) gerçek Web / Server Client ID'si
+  static const _serverClientId =
+      '868408286396-q9fmopm0s46lu6cj191n813290gbvh4l.apps.googleusercontent.com';
+
   final GoogleSignIn _googleSignIn = GoogleSignIn(
-    clientId: _clientId,
+    clientId: defaultTargetPlatform == TargetPlatform.iOS ? _iosClientId : null,
+    serverClientId: _serverClientId,
     scopes: ['email', 'profile'],
   );
 
