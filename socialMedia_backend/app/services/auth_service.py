@@ -67,8 +67,8 @@ class AuthService:
         self.db.refresh(new_user)
         return str(new_user.id)
 
-    def login(self, email: str, password: str, device: str = None, ip: str = None) -> tuple[str, str]:
-        """Returns (access_token, refresh_token_plain)."""
+    def login(self, email: str, password: str, device: str = None, ip: str = None) -> tuple[str, str, str]:
+        """Returns (access_token, refresh_token_plain, user_id)."""
         user = self.db.scalars(select(Profile).where(Profile.email == email)).first()
         if not user or not self.verify_password(password, user.password_hash):
             raise ValueError("E-posta veya şifre hatalı.")
@@ -90,9 +90,48 @@ class AuthService:
         self.db.add(rt)
         self.db.commit()
         
-        return access_token, refresh_token_plain
+        return access_token, refresh_token_plain, str(user.id)
 
-    def refresh(self, old_refresh_token_plain: str, device: str = None, ip: str = None) -> tuple[str, str]:
+    def google_login(self, email: str, display_name: str = None, avatar_url: str = None, device: str = None, ip: str = None) -> tuple[str, str, str]:
+        """Handles Google OAuth login or automatic profile registration. Returns (access_token, refresh_token_plain, user_id)."""
+        user = self.db.scalars(select(Profile).where(Profile.email == email)).first()
+        if not user:
+            clean_name = (display_name or email.split('@')[0]).lower().replace(" ", "_")[:20]
+            new_username = f"{clean_name}_{random.getrandbits(32):08x}"
+            user = Profile(
+                email=email,
+                password_hash=None,
+                username=new_username,
+                display_name=display_name or email.split('@')[0],
+                avatar_url=avatar_url
+            )
+            self.db.add(user)
+            self.db.commit()
+            self.db.refresh(user)
+        elif avatar_url and not user.avatar_url:
+            user.avatar_url = avatar_url
+            self.db.commit()
+
+        # Create Access Token
+        access_token = self.create_access_token(data={"sub": str(user.id)})
+        
+        # Create Refresh Token
+        refresh_token_plain = f"rt_{random.getrandbits(128):032x}"
+        rt_hash = self.hash_token(refresh_token_plain)
+        
+        rt = RefreshToken(
+            user_id=user.id,
+            token_hash=rt_hash,
+            device=device,
+            ip=ip,
+            expires_at=datetime.now(timezone.utc) + timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS)
+        )
+        self.db.add(rt)
+        self.db.commit()
+        
+        return access_token, refresh_token_plain, str(user.id)
+
+    def refresh(self, old_refresh_token_plain: str, device: str = None, ip: str = None) -> tuple[str, str, str]:
         """Refresh Token Rotation."""
         rt_hash = self.hash_token(old_refresh_token_plain)
         
@@ -101,7 +140,6 @@ class AuthService:
             raise ValueError("Geçersiz Refresh Token.")
             
         if rt.revoked_at or rt.expires_at < datetime.now(timezone.utc):
-            # If a revoked token is used, it might be stolen! We should theoretically revoke all tokens for this user.
             raise ValueError("Refresh Token süresi dolmuş veya iptal edilmiş.")
             
         # Revoke old token (Rotation)
@@ -124,7 +162,7 @@ class AuthService:
         self.db.add(new_rt)
         self.db.commit()
         
-        return access_token, new_refresh_token_plain
+        return access_token, new_refresh_token_plain, str(rt.user_id)
 
     def logout(self, refresh_token_plain: str):
         rt_hash = self.hash_token(refresh_token_plain)

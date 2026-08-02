@@ -16,6 +16,7 @@ router = APIRouter()
 class TokenResponse(BaseModel):
     access_token: str
     refresh_token: str
+    user_id: str | None = None
     token_type: str = "bearer"
     
 class RefreshRequest(BaseModel):
@@ -23,6 +24,12 @@ class RefreshRequest(BaseModel):
 
 class LogoutRequest(BaseModel):
     refresh_token: str
+
+class GoogleLoginRequest(BaseModel):
+    id_token: str | None = None
+    email: str
+    display_name: str | None = None
+    avatar_url: str | None = None
 
 def get_auth_service(db: Session = Depends(get_db)) -> AuthService:
     return AuthService(db)
@@ -32,13 +39,13 @@ def register(request: UserRegisterRequest, req: Request, service: AuthService = 
     try:
         service.register(request.email, request.password)
         # Login directly after register
-        access_token, refresh_token = service.login(
+        access_token, refresh_token, user_id = service.login(
             request.email, 
             request.password, 
             device=req.headers.get("User-Agent"), 
             ip=req.client.host if req.client else None
         )
-        return TokenResponse(access_token=access_token, refresh_token=refresh_token)
+        return TokenResponse(access_token=access_token, refresh_token=refresh_token, user_id=user_id)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
@@ -47,27 +54,41 @@ def register(request: UserRegisterRequest, req: Request, service: AuthService = 
 @router.post("/login", response_model=TokenResponse)
 def login(request: UserLoginRequest, req: Request, service: AuthService = Depends(get_auth_service)):
     try:
-        access_token, refresh_token = service.login(
+        access_token, refresh_token, user_id = service.login(
             request.email, 
             request.password,
             device=req.headers.get("User-Agent"), 
             ip=req.client.host if req.client else None
         )
-        return TokenResponse(access_token=access_token, refresh_token=refresh_token)
+        return TokenResponse(access_token=access_token, refresh_token=refresh_token, user_id=user_id)
     except ValueError as e:
         raise HTTPException(status_code=401, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/google", response_model=TokenResponse)
+def google_login(request: GoogleLoginRequest, req: Request, service: AuthService = Depends(get_auth_service)):
+    try:
+        access_token, refresh_token, user_id = service.google_login(
+            email=request.email,
+            display_name=request.display_name or request.email.split("@")[0],
+            avatar_url=request.avatar_url,
+            device=req.headers.get("User-Agent"),
+            ip=req.client.host if req.client else None
+        )
+        return TokenResponse(access_token=access_token, refresh_token=refresh_token, user_id=user_id)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/refresh", response_model=TokenResponse)
 def refresh(request: RefreshRequest, req: Request, service: AuthService = Depends(get_auth_service)):
     try:
-        access_token, refresh_token = service.refresh(
+        access_token, refresh_token, user_id = service.refresh(
             request.refresh_token,
             device=req.headers.get("User-Agent"), 
             ip=req.client.host if req.client else None
         )
-        return TokenResponse(access_token=access_token, refresh_token=refresh_token)
+        return TokenResponse(access_token=access_token, refresh_token=refresh_token, user_id=user_id)
     except ValueError as e:
         raise HTTPException(status_code=401, detail=str(e))
     except Exception as e:
