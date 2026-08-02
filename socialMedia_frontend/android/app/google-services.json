@@ -12,7 +12,20 @@
           "package_name": "com.example.dijital_gardrop_social"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "868408286396-s7nph8oc1hu1dr552lbhiu0uic7a8um3.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.dijital_gardrop_social",
+            "certificate_hash": "55a36bc73ec08b6a87520ab29c014d84bd1561ef"
+          }
+        },
+        {
+          "client_id": "868408286396-q9fmopm0s46lu6cj191n813290gbvh4l.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyDwGuC3tQl-w_htC8oKbdIut-0GI-a93eo"
@@ -20,7 +33,12 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "868408286396-q9fmopm0s46lu6cj191n813290gbvh4l.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
         }
       }
     }
